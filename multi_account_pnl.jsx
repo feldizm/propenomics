@@ -42,7 +42,7 @@ function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
 
 function runSim(params) {
   const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
-    affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate,
+    affiliateShare, affiliateComm, resetDiscount, resetRate,
     extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
@@ -61,10 +61,12 @@ function runSim(params) {
 
     // Fees — deterministic. Marketing discount applies to non-affiliate
     // sales only; affiliate sales pay full price then rebate a commission.
+    // Each program (size) has its own discount percentage.
+    const sizeDiscount = (sz.discount ?? 0) / 100;
     const affSales = Math.round(n * affiliateShare);
     const mktSales = n - affSales;
     const gf = n * sz.fee;
-    const disc = mktSales * sz.fee * marketingDiscount;
+    const disc = mktSales * sz.fee * sizeDiscount;
     const ac = affSales * sz.fee * affiliateComm;
     const nf = gf - disc - ac;
     grossFees += gf; discounts += disc; affComm += ac;
@@ -221,6 +223,64 @@ const presetBtnStyle = {
   fontWeight: 600, fontSize: 10, cursor: "pointer", letterSpacing: "0.02em",
 };
 
+const AccountSizeRow = ({ d, onUpdate }) => {
+  const [editFee, setEditFee] = useState(false);
+  const [rawFee, setRawFee] = useState(String(d.fee));
+  const [editCount, setEditCount] = useState(false);
+  const [rawCount, setRawCount] = useState(String(d.count));
+  const [editDisc, setEditDisc] = useState(false);
+  const [rawDisc, setRawDisc] = useState(String(d.discount ?? 0));
+
+  const cellInput = {
+    width: 52, padding: "3px 4px", background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa",
+    fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right",
+  };
+
+  return (
+    <tr>
+      <td style={{ padding: "4px", fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>{d.label}</td>
+      <td style={{ padding: "4px", textAlign: "right" }}>
+        <input
+          type="text" inputMode="decimal"
+          value={editFee ? rawFee : fmtNum(d.fee)}
+          onFocus={() => { setEditFee(true); setRawFee(String(d.fee)); }}
+          onBlur={() => { setEditFee(false); onUpdate("fee", parseNum(rawFee)); }}
+          onChange={e => setRawFee(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && e.target.blur()}
+          style={cellInput}
+        />
+      </td>
+      <td style={{ padding: "4px", textAlign: "right" }}>
+        <input
+          type="text" inputMode="numeric"
+          value={editCount ? rawCount : fmtNum(d.count)}
+          onFocus={() => { setEditCount(true); setRawCount(String(d.count)); }}
+          onBlur={() => { setEditCount(false); onUpdate("count", Math.round(parseNum(rawCount))); }}
+          onChange={e => setRawCount(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && e.target.blur()}
+          style={cellInput}
+        />
+      </td>
+      <td style={{ padding: "4px", textAlign: "right" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+          <input
+            type="text" inputMode="decimal"
+            value={editDisc ? rawDisc : fmtNum(d.discount ?? 0)}
+            onFocus={() => { setEditDisc(true); setRawDisc(String(d.discount ?? 0)); }}
+            onBlur={() => { setEditDisc(false); onUpdate("discount", parseNum(rawDisc)); }}
+            onChange={e => setRawDisc(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && e.target.blur()}
+            style={{ ...cellInput, width: 38 }}
+            title="Marketing discount % for this program"
+          />
+          <span style={{ fontSize: 10, color: "#475569" }}>%</span>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
 const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
   const [editAmount, setEditAmount] = useState(false);
   const [rawAmount, setRawAmount] = useState(String(cost.amount));
@@ -306,10 +366,10 @@ export default function App() {
 
   // Account distribution
   const [dist, setDist] = useState([
-    { size: 10000, fee: 167, count: 1000, label: "$10K", color: "#06b6d4" },
-    { size: 25000, fee: 397, count: 1000, label: "$25K", color: "#3b82f6" },
-    { size: 50000, fee: 747, count: 1000, label: "$50K", color: "#8b5cf6" },
-    { size: 100000, fee: 1197, count: 1000, label: "$100K", color: "#f59e0b" },
+    { size: 10000,  fee: 167,  count: 1000, discount: 15, label: "$10K",  color: "#06b6d4" },
+    { size: 25000,  fee: 397,  count: 1000, discount: 15, label: "$25K",  color: "#3b82f6" },
+    { size: 50000,  fee: 747,  count: 1000, discount: 15, label: "$50K",  color: "#8b5cf6" },
+    { size: 100000, fee: 1197, count: 1000, discount: 15, label: "$100K", color: "#f59e0b" },
   ]);
 
   // Costs
@@ -318,7 +378,6 @@ export default function App() {
   const [marketingCost, setMarketingCost] = useState(100000);
   const [affiliateShare, setAffiliateShare] = useState(25);
   const [affiliateComm, setAffiliateComm] = useState(20);
-  const [marketingDiscount, setMarketingDiscount] = useState(15);
   const [resetDiscount, setResetDiscount] = useState(80);
   const [resetRate, setResetRate] = useState(35);
 
@@ -353,12 +412,12 @@ export default function App() {
       sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
       platformCost, employeeCost, marketingCost,
       affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
-      marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
+      resetDiscount: resetDiscount / 100,
       resetRate: resetRate / 100,
       extraCosts,
     }));
   }, [passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate, extraCosts]);
+      affiliateShare, affiliateComm, resetDiscount, resetRate, extraCosts]);
 
   useEffect(() => { run(); }, []);
 
@@ -396,41 +455,19 @@ export default function App() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
               <thead>
                 <tr>
-                  {["Size", "Fee", "Qty"].map(h => (
+                  {["Size", "Fee", "Qty", "Disc"].map(h => (
                     <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {dist.map((d, i) => {
-                  const [editFee, setEditFee] = useState(false);
-                  const [rawFee, setRawFee] = useState(String(d.fee));
-                  const [editCount, setEditCount] = useState(false);
-                  const [rawCount, setRawCount] = useState(String(d.count));
-                  return (
-                  <tr key={d.size}>
-                    <td style={{ padding: "4px", fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>{d.label}</td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>
-                      <input type="text" inputMode="decimal"
-                        value={editFee ? rawFee : fmtNum(d.fee)}
-                        onFocus={() => { setEditFee(true); setRawFee(String(d.fee)); }}
-                        onBlur={() => { setEditFee(false); updateDist(i, "fee", parseNum(rawFee)); }}
-                        onChange={e => setRawFee(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && e.target.blur()}
-                        style={{ width: 60, padding: "3px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }} />
-                    </td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>
-                      <input type="text" inputMode="numeric"
-                        value={editCount ? rawCount : fmtNum(d.count)}
-                        onFocus={() => { setEditCount(true); setRawCount(String(d.count)); }}
-                        onBlur={() => { setEditCount(false); updateDist(i, "count", Math.round(parseNum(rawCount))); }}
-                        onChange={e => setRawCount(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && e.target.blur()}
-                        style={{ width: 60, padding: "3px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }} />
-                    </td>
-                  </tr>
-                  );
-                })}
+                {dist.map((d, i) => (
+                  <AccountSizeRow
+                    key={d.size}
+                    d={d}
+                    onUpdate={(field, val) => updateDist(i, field, val)}
+                  />
+                ))}
               </tbody>
             </table>
             <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
@@ -463,7 +500,9 @@ export default function App() {
               <Input label="Marketing / Month" value={marketingCost} onChange={setMarketingCost} prefix="$" width={80} />
               <Input label="Affiliate Share" value={affiliateShare} onChange={setAffiliateShare} suffix="%" width={50} />
               <Input label="Affiliate Commission" value={affiliateComm} onChange={setAffiliateComm} suffix="%" width={50} />
-              <Input label="Marketing Discount" value={marketingDiscount} onChange={setMarketingDiscount} suffix="%" width={50} />
+            </div>
+            <div style={{ fontSize: 9, color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
+              Per-program marketing discount is now set in the Account Distribution table (Disc column).
             </div>
           </div>
         </div>
@@ -582,7 +621,7 @@ export default function App() {
               <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
                 <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue</h3>
                 <Row label="Gross Fee Revenue" value={results.grossFees} bold color="#3b82f6" />
-                <Row label={`Marketing Discounts (${marketingDiscount}%)`} value={-results.discounts} indent color="#ef4444" />
+                <Row label="Marketing Discounts (per program)" value={-results.discounts} indent color="#ef4444" />
                 <Row label={`Affiliate Commissions (${affiliateComm}%)`} value={-results.affComm} indent color="#ef4444" />
                 <Row label="= Net Fee Revenue" value={results.netFees} bold bg="rgba(255,255,255,0.03)" />
                 <div style={{ height: 6 }} />
@@ -644,7 +683,10 @@ export default function App() {
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{d.count.toLocaleString()}</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>${d.fee}</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{$(s.gf)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>({$(s.disc)})</td>
+                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>
+                            ({$(s.disc)})
+                            <span style={{ fontSize: 9, color: "#64748b", marginLeft: 4 }}>{d.discount ?? 0}%</span>
+                          </td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>({$(s.ac)})</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#3b82f6" }}>{$(s.nf)}</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#6366f1" }}>{$(s.resetRev)}</td>

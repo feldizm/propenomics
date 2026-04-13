@@ -1,139 +1,111 @@
 import { useState, useCallback, useEffect } from "react";
 
-const DD = 0.06;
-const LEVERAGE = 30;
 const PAYOUT_CAP_PCT = 0.05;
-const FUNDED_DAYS = 180;
-const BIWEEKLY = 14;
+const PAYOUT_FLOOR_PCT = 0.001;
+const PAYOUT_LOG_SIGMA = 0.6;
+// genPayout used cycle probs: P(1)=0.55, P(2)=0.30, P(3)=0.15
+const E_CYCLES = 0.55 * 1 + 0.30 * 2 + 0.15 * 3; // 1.60
 
-function mulberry32(a) {
-  return function() {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function gauss(rng) {
-  let u = 0, v = 0;
-  while (!u) u = rng(); while (!v) v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-function genPayout(accountSize, rng, avgPayoutPct) {
-  const cycleRoll = rng();
-  const cycles = cycleRoll < 0.55 ? 1 : cycleRoll < 0.85 ? 2 : 3;
-  const cap = accountSize * PAYOUT_CAP_PCT;
-  const logMean = Math.log(accountSize * avgPayoutPct);
-  const logSigma = 0.6;
-  let total = 0;
-  for (let c = 0; c < cycles; c++) {
-    const raw = Math.exp(logMean + gauss(rng) * logSigma);
-    total += Math.max(accountSize * 0.001, Math.min(raw, cap));
-  }
-  return { total, cycles };
+// Standard normal CDF — Abramowitz & Stegun 7.1.26 (~1.5e-7 accuracy).
+function normCdf(x) {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + p * ax);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+  return 0.5 * (1 + sign * y);
 }
 
-function simFundedPhase(accountSize, rng, fundedPayoutPct, avgPayoutPct) {
-  if (rng() >= fundedPayoutPct) {
-    let eq = accountSize, hwm = accountSize;
-    const ls = LEVERAGE / 20;
-    for (let d = 1; d <= FUNDED_DAYS; d++) {
-      eq *= (1 + -0.0005 + gauss(rng) * 0.016 * ls);
-      hwm = Math.max(hwm, eq);
-      if (eq <= hwm * (1 - DD)) return { paid: 0, nPay: 0 };
-    }
-    return { paid: 0, nPay: 0 };
-  }
-  const p = genPayout(accountSize, rng, avgPayoutPct);
-  return { paid: p.total, nPay: p.cycles };
+// Closed-form E[clip(X, lo, hi)] for X ~ LogNormal(mu, sigma²).
+// Derivation: split the expectation into lo·P(X<lo) + ∫[lo,hi] x·f(x)dx + hi·P(X>hi).
+// The middle integral is exp(mu + σ²/2) · (Φ((ln(hi)−μ−σ²)/σ) − Φ((ln(lo)−μ−σ²)/σ)).
+function expectedClippedLognormal(mu, sigma, lo, hi) {
+  const zLo = (Math.log(lo) - mu) / sigma;
+  const zHi = (Math.log(hi) - mu) / sigma;
+  const zLoShift = zLo - sigma;
+  const zHiShift = zHi - sigma;
+  const pBelow = normCdf(zLo);
+  const pAbove = 1 - normCdf(zHi);
+  const meanUncapped = Math.exp(mu + 0.5 * sigma * sigma);
+  const meanInRange = meanUncapped * (normCdf(zHiShift) - normCdf(zLoShift));
+  return lo * pBelow + meanInRange + hi * pAbove;
 }
 
-function runSim(params, seed, runs = 200) {
+function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
+  const mu = Math.log(accountSize * medianPayoutPct);
+  const lo = accountSize * PAYOUT_FLOOR_PCT;
+  const hi = accountSize * PAYOUT_CAP_PCT;
+  const perCycle = expectedClippedLognormal(mu, PAYOUT_LOG_SIGMA, lo, hi);
+  return E_CYCLES * perCycle;
+}
+
+function runSim(params) {
   const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
-    affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate } = params;
+    affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate,
+    extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
-  const allRuns = [];
 
-  for (let r = 0; r < runs; r++) {
-    const rng = mulberry32(seed + r);
-    let grossFees = 0, discounts = 0, affComm = 0, resetRev = 0, payouts = 0;
-    let payoutTraders = 0, resetCount = 0, passers = 0;
-    const sd = {};
+  let grossFees = 0, discounts = 0, affComm = 0, resetRev = 0, payouts = 0;
+  let passers = 0, payoutTraders = 0, resetCount = 0;
+  const sd = {};
 
-    for (const sz of sizes) {
-      const n = sz.count;
-      if (n === 0) continue;
-      const pc = Math.round(n * passRate / 100);
-      const fc = n - pc;
-      passers += pc;
+  for (const sz of sizes) {
+    const n = sz.count;
+    if (n === 0) continue;
 
-      const affSales = Math.round(n * affiliateShare);
-      const mktSales = n - affSales;
-      const gf = n * sz.fee;
-      const disc = mktSales * sz.fee * marketingDiscount;
-      const ac = affSales * sz.fee * affiliateComm;
-      const nf = gf - disc - ac;
+    const pc = Math.round(n * passRate / 100);
+    const fc = n - pc;
+    passers += pc;
 
-      grossFees += gf; discounts += disc; affComm += ac;
+    // Fees — deterministic. Marketing discount applies to non-affiliate
+    // sales only; affiliate sales pay full price then rebate a commission.
+    const affSales = Math.round(n * affiliateShare);
+    const mktSales = n - affSales;
+    const gf = n * sz.fee;
+    const disc = mktSales * sz.fee * marketingDiscount;
+    const ac = affSales * sz.fee * affiliateComm;
+    const nf = gf - disc - ac;
+    grossFees += gf; discounts += disc; affComm += ac;
 
-      let sizeResetRev = 0, sizeResetCount = 0;
-      for (let i = 0; i < fc; i++) {
-        if (rng() < resetRate) {
-          const rf = sz.fee * resetDiscount;
-          const isAff = rng() < affiliateShare;
-          sizeResetRev += isAff ? rf * (1 - affiliateComm) : rf;
-          sizeResetCount++;
-        }
-      }
-      resetRev += sizeResetRev; resetCount += sizeResetCount;
+    // Expected resets: fc Bernoulli(resetRate) trials, each reset has
+    // probability affiliateShare of being an affiliate sale (which nets
+    // reset fee minus commission).
+    const sizeResetCount = fc * resetRate;
+    const effPerReset = sz.fee * resetDiscount * (1 - affiliateShare * affiliateComm);
+    const sizeResetRev = sizeResetCount * effPerReset;
+    resetRev += sizeResetRev;
+    resetCount += sizeResetCount;
 
-      let sizePaid = 0, sizePT = 0;
-      for (let i = 0; i < pc; i++) {
-        const f = simFundedPhase(sz.size, rng, fundedPct / 100, avgPayoutPct);
-        sizePaid += f.paid;
-        if (f.nPay > 0) sizePT++;
-      }
-      payouts += sizePaid; payoutTraders += sizePT;
+    // Expected payouts: of the `pc` passers, a fraction `fundedPct` ever
+    // collect; each collector earns E[clipped lognormal] · E[cycles].
+    const sizePT = pc * fundedPct;
+    const sizePaid = sizePT * expectedPayoutPerTrader(sz.size, avgPayoutPct);
+    payouts += sizePaid;
+    payoutTraders += sizePT;
 
-      sd[sz.size] = { gf, disc, ac, nf, resetRev: sizeResetRev, payouts: sizePaid, pt: sizePT, pc, n };
-    }
-
-    const totalPlatform = totalAccounts * platformCost;
-    const fixed = employeeCost + marketingCost;
-    const totalRev = (grossFees - discounts - affComm) + resetRev;
-    const totalCost = payouts + totalPlatform + fixed;
-    const net = totalRev - totalCost;
-
-    allRuns.push({ grossFees, discounts, affComm, resetRev, payouts, payoutTraders,
-      totalPlatform, fixed, totalRev, totalCost, net, passers, resetCount, sd,
-      margin: totalRev > 0 ? net / totalRev * 100 : 0 });
+    sd[sz.size] = { gf, disc, ac, nf, resetRev: sizeResetRev, payouts: sizePaid, pt: sizePT, pc, n };
   }
 
-  const avg = (fn) => allRuns.reduce((s, r) => s + fn(r), 0) / runs;
-  const sorted = allRuns.map(r => r.net).sort((a, b) => a - b);
+  const totalPlatform = totalAccounts * platformCost;
+  const fixed = employeeCost + marketingCost;
+  const totalRev = (grossFees - discounts - affComm) + resetRev;
+  const extras = computeExtras(extraCosts, {
+    totalAccounts, passers, payoutTraders, grossFees, totalRev,
+  });
+  const totalCost = payouts + totalPlatform + fixed + extras.total;
+  const net = totalRev - totalCost;
 
   return {
-    grossFees: avg(r => r.grossFees), discounts: avg(r => r.discounts),
-    affComm: avg(r => r.affComm), netFees: avg(r => r.grossFees) - avg(r => r.discounts) - avg(r => r.affComm),
-    resetRev: avg(r => r.resetRev), payouts: avg(r => r.payouts),
-    platform: avg(r => r.totalPlatform), fixed: avg(r => r.fixed),
-    revenue: avg(r => r.totalRev), costs: avg(r => r.totalCost),
-    net: avg(r => r.net), margin: avg(r => r.margin),
-    profitable: allRuns.filter(r => r.net > 0).length, total: runs,
-    netMin: sorted[0], netMax: sorted[sorted.length - 1],
-    net5: sorted[Math.floor(runs * 0.05)], net95: sorted[Math.floor(runs * 0.95)],
-    median: sorted[Math.floor(runs / 2)],
-    passers: avg(r => r.passers), payoutTraders: avg(r => r.payoutTraders),
-    resets: avg(r => r.resetCount), totalAccounts,
-    sizeAvg: Object.fromEntries(sizes.map(sz => [sz.size, {
-      gf: avg(r => r.sd[sz.size]?.gf || 0), disc: avg(r => r.sd[sz.size]?.disc || 0),
-      ac: avg(r => r.sd[sz.size]?.ac || 0), nf: avg(r => r.sd[sz.size]?.nf || 0),
-      resetRev: avg(r => r.sd[sz.size]?.resetRev || 0), payouts: avg(r => r.sd[sz.size]?.payouts || 0),
-      pt: avg(r => r.sd[sz.size]?.pt || 0), pc: avg(r => r.sd[sz.size]?.pc || 0),
-      n: sz.count,
-    }])),
+    grossFees, discounts, affComm, netFees: grossFees - discounts - affComm,
+    resetRev, payouts,
+    platform: totalPlatform, fixed,
+    extras: extras.total, extrasBreakdown: extras.bd,
+    revenue: totalRev, costs: totalCost,
+    net, margin: totalRev > 0 ? (net / totalRev) * 100 : 0,
+    passers, payoutTraders, resets: resetCount, totalAccounts,
+    sizeAvg: sd,
   };
 }
 
@@ -158,6 +130,39 @@ const parseNum = (str) => {
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 };
+
+// Extra costs — user-definable overhead lines. Each type scales against a
+// different simulation quantity, so a single $ amount can represent very
+// different real-world costs (flat rent vs. per-funded-trader KYC, etc.).
+const COST_TYPES = {
+  fixed:       { label: "Fixed $",         short: "$",        desc: "Flat dollar amount" },
+  per_account: { label: "$ per account",   short: "$/acct",   desc: "× total accounts sold" },
+  per_passer:  { label: "$ per passer",    short: "$/passer", desc: "× traders who pass eval" },
+  per_payout:  { label: "$ per payout",    short: "$/payout", desc: "× traders receiving payouts" },
+  pct_revenue: { label: "% of revenue",    short: "% rev",    desc: "% of total revenue" },
+  pct_fees:    { label: "% of gross fees", short: "% fees",   desc: "% of gross fee revenue" },
+};
+
+function computeExtras(extras, ctx) {
+  let total = 0;
+  const bd = {};
+  for (const c of extras) {
+    const a = Number(c.amount) || 0;
+    let v = 0;
+    switch (c.type) {
+      case "fixed":       v = a; break;
+      case "per_account": v = a * ctx.totalAccounts; break;
+      case "per_passer":  v = a * ctx.passers; break;
+      case "per_payout":  v = a * ctx.payoutTraders; break;
+      case "pct_revenue": v = (a / 100) * ctx.totalRev; break;
+      case "pct_fees":    v = (a / 100) * ctx.grossFees; break;
+      default: v = 0;
+    }
+    total += v;
+    bd[c.id] = v;
+  }
+  return { total, bd };
+}
 
 const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
   const [editing, setEditing] = useState(false);
@@ -208,8 +213,91 @@ const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
   );
 };
 
+const presetBtnStyle = {
+  padding: "6px 12px", background: "rgba(255,255,255,0.04)", color: "#94a3b8",
+  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
+  fontWeight: 600, fontSize: 10, cursor: "pointer", letterSpacing: "0.02em",
+};
+
+const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
+  const [editAmount, setEditAmount] = useState(false);
+  const [rawAmount, setRawAmount] = useState(String(cost.amount));
+  const isPct = cost.type === "pct_revenue" || cost.type === "pct_fees";
+
+  return (
+    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+      <td style={{ padding: "6px 5px" }}>
+        <input
+          type="text"
+          value={cost.name}
+          onChange={e => onUpdate("name", e.target.value)}
+          placeholder="Cost name"
+          style={{
+            width: "100%", minWidth: 140, padding: "5px 7px",
+            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 4, color: "#e2e8f0", fontFamily: "'Inter'",
+            fontSize: 11, fontWeight: 500,
+          }}
+        />
+      </td>
+      <td style={{ padding: "6px 5px", textAlign: "right" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
+          {!isPct && <span style={{ fontSize: 11, color: "#475569" }}>$</span>}
+          <input
+            type="text"
+            inputMode="decimal"
+            value={editAmount ? rawAmount : fmtNum(cost.amount)}
+            onFocus={() => { setEditAmount(true); setRawAmount(String(cost.amount)); }}
+            onBlur={() => { setEditAmount(false); onUpdate("amount", parseNum(rawAmount)); }}
+            onChange={e => setRawAmount(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && e.target.blur()}
+            style={{
+              width: 90, padding: "5px 7px", background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#60a5fa",
+              fontFamily: "'JetBrains Mono'", fontSize: 11, fontWeight: 600, textAlign: "right",
+            }}
+          />
+          {isPct && <span style={{ fontSize: 11, color: "#475569" }}>%</span>}
+        </div>
+      </td>
+      <td style={{ padding: "6px 5px" }}>
+        <select
+          value={cost.type}
+          onChange={e => onUpdate("type", e.target.value)}
+          title={COST_TYPES[cost.type]?.desc}
+          style={{
+            padding: "5px 7px", background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#e2e8f0",
+            fontFamily: "'Inter'", fontSize: 11, fontWeight: 500, cursor: "pointer",
+          }}
+        >
+          {Object.entries(COST_TYPES).map(([k, v]) => (
+            <option key={k} value={k} style={{ background: "#0f172a" }}>{v.label}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{
+        padding: "6px 5px", textAlign: "right",
+        fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444",
+      }}>
+        {impact != null ? $(impact) : "—"}
+      </td>
+      <td style={{ padding: "6px 5px", textAlign: "center" }}>
+        <button
+          onClick={onRemove}
+          title="Remove cost"
+          style={{
+            padding: "3px 9px", background: "rgba(239,68,68,0.1)", color: "#ef4444",
+            border: "1px solid rgba(239,68,68,0.2)", borderRadius: 4, cursor: "pointer",
+            fontSize: 14, fontWeight: 700, lineHeight: 1,
+          }}
+        >×</button>
+      </td>
+    </tr>
+  );
+};
+
 export default function App() {
-  const [seed, setSeed] = useState(42);
   const [passRate, setPassRate] = useState(10);
   const [fundedPct, setFundedPct] = useState(10);
   const [avgPayoutPct, setAvgPayoutPct] = useState(5); // median per-cycle payout as % of account
@@ -232,29 +320,43 @@ export default function App() {
   const [resetDiscount, setResetDiscount] = useState(80);
   const [resetRate, setResetRate] = useState(35);
 
+  // Extra user-defined costs / overheads / parameters
+  const [extraCosts, setExtraCosts] = useState([]);
+
   const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
 
   const updateDist = (idx, field, val) => {
     setDist(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
   };
 
+  const addExtraCost = (preset) => {
+    setExtraCosts(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      name: preset?.name || "New Cost",
+      amount: preset?.amount ?? 0,
+      type: preset?.type || "fixed",
+    }]);
+  };
+  const updateExtraCost = (id, field, val) => {
+    setExtraCosts(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c));
+  };
+  const removeExtraCost = (id) => {
+    setExtraCosts(prev => prev.filter(c => c.id !== id));
+  };
+
   const totalAccounts = dist.reduce((s, d) => s + d.count, 0);
 
   const run = useCallback(() => {
-    setLoading(true); setResults(null);
-    setTimeout(() => {
-      const r = runSim({
-        sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
-        platformCost, employeeCost, marketingCost,
-        affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
-        marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
-        resetRate: resetRate / 100,
-      }, seed);
-      setResults(r); setLoading(false);
-    }, 150);
-  }, [seed, passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate]);
+    setResults(runSim({
+      sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
+      platformCost, employeeCost, marketingCost,
+      affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
+      marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
+      resetRate: resetRate / 100,
+      extraCosts,
+    }));
+  }, [passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
+      affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate, extraCosts]);
 
   useEffect(() => { run(); }, []);
 
@@ -280,7 +382,7 @@ export default function App() {
           CXM Freedom — Full P&L Simulator
         </h1>
         <p style={{ fontSize: 11, color: "#475569", margin: "0 0 16px" }}>
-          All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. 200 Monte Carlo runs.
+          All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. Deterministic expected-value model.
         </p>
 
         {/* ==================== INPUT PANELS ==================== */}
@@ -364,15 +466,92 @@ export default function App() {
           </div>
         </div>
 
+        {/* ==================== EXTRA COSTS ==================== */}
+        <div style={{
+          padding: 14, marginBottom: 20, background: "rgba(167,139,250,0.03)",
+          border: "1px solid rgba(167,139,250,0.15)", borderRadius: 8,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Extra Costs & Overheads
+              </h3>
+              <div style={{ fontSize: 9, color: "#64748b", marginTop: 3, maxWidth: 560 }}>
+                Add custom cost lines — rent, SaaS, legal, KYC/onboarding, payment processing, rev-share, tax accrual, etc. Each line scales against its chosen base (flat $, per account, per passer, per payout, % of revenue, or % of fees).
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button
+                onClick={() => addExtraCost({ name: "Rent & Utilities", amount: 5000, type: "fixed" })}
+                style={presetBtnStyle}
+              >+ Rent</button>
+              <button
+                onClick={() => addExtraCost({ name: "Payment Processing", amount: 3, type: "pct_fees" })}
+                style={presetBtnStyle}
+              >+ Payment %</button>
+              <button
+                onClick={() => addExtraCost({ name: "KYC / Onboarding", amount: 15, type: "per_passer" })}
+                style={presetBtnStyle}
+              >+ KYC</button>
+              <button
+                onClick={() => addExtraCost()}
+                style={{
+                  padding: "6px 14px", background: "rgba(167,139,250,0.2)", color: "#c4b5fd",
+                  border: "1px solid rgba(167,139,250,0.4)", borderRadius: 4,
+                  fontWeight: 700, fontSize: 11, cursor: "pointer",
+                }}
+              >+ Add Cost</button>
+            </div>
+          </div>
+
+          {extraCosts.length === 0 ? (
+            <div style={{ fontSize: 11, color: "#475569", padding: "14px 0", textAlign: "center", fontStyle: "italic" }}>
+              No extra costs configured. Click a quick-add button or "Add Cost" to start.
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <th style={{ padding: "5px 5px", textAlign: "left", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Name</th>
+                  <th style={{ padding: "5px 5px", textAlign: "right", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Amount</th>
+                  <th style={{ padding: "5px 5px", textAlign: "left", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Type</th>
+                  <th style={{ padding: "5px 5px", textAlign: "right", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Impact (avg)</th>
+                  <th style={{ padding: "5px 5px", width: 40 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {extraCosts.map(c => (
+                  <ExtraCostRow
+                    key={c.id}
+                    cost={c}
+                    onUpdate={(f, v) => updateExtraCost(c.id, f, v)}
+                    onRemove={() => removeExtraCost(c.id)}
+                    impact={results?.extrasBreakdown?.[c.id]}
+                  />
+                ))}
+                <tr style={{ borderTop: "1px solid rgba(255,255,255,0.1)", background: "rgba(167,139,250,0.04)" }}>
+                  <td colSpan={3} style={{ padding: "8px 5px", fontSize: 10, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    Total Extra Costs ({extraCosts.length})
+                  </td>
+                  <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: "#ef4444" }}>
+                    {results ? $(results.extras) : "—"}
+                  </td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+
         {/* Run button */}
         <div style={{ marginBottom: 20 }}>
-          <button onClick={run} disabled={loading}
+          <button onClick={run}
             style={{
-              padding: "10px 32px", background: loading ? "#1e293b" : "#22c55e",
-              color: loading ? "#64748b" : "#000", border: "none", borderRadius: 6,
+              padding: "10px 32px", background: "#22c55e",
+              color: "#000", border: "none", borderRadius: 6,
               fontWeight: 800, fontSize: 13, cursor: "pointer", width: "100%",
             }}>
-            {loading ? "Running 200 simulations…" : `Run Monte Carlo — ${totalAccounts.toLocaleString()} Accounts`}
+            {`Recalculate — ${totalAccounts.toLocaleString()} Accounts`}
           </button>
         </div>
 
@@ -392,7 +571,7 @@ export default function App() {
                 {$(results.net)}
               </div>
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                {results.margin.toFixed(1)}% margin · {results.profitable}/200 profitable · 5th–95th: {$(results.net5)} to {$(results.net95)}
+                {results.margin.toFixed(1)}% margin · Revenue {$(results.revenue)} · Costs {$(results.costs)}
               </div>
             </div>
 
@@ -418,6 +597,21 @@ export default function App() {
                 <Row label="Employees" value={employeeCost} indent color="#f59e0b" />
                 <Row label="Marketing" value={marketingCost} indent color="#f59e0b" />
                 <Row label="= Fixed + Platform" value={results.fixed + results.platform} bold bg="rgba(255,255,255,0.03)" />
+                {extraCosts.length > 0 && (
+                  <>
+                    <div style={{ height: 6 }} />
+                    {extraCosts.map(c => (
+                      <Row
+                        key={c.id}
+                        label={`${c.name || "Extra"} (${COST_TYPES[c.type]?.short || ""})`}
+                        value={results.extrasBreakdown?.[c.id] || 0}
+                        indent
+                        color="#a78bfa"
+                      />
+                    ))}
+                    <Row label="= Extra Costs" value={results.extras} bold color="#a78bfa" bg="rgba(167,139,250,0.05)" />
+                  </>
+                )}
                 <div style={{ height: 6 }} />
                 <Row label="TOTAL COSTS" value={results.costs} bold color="#ef4444" bg="rgba(239,68,68,0.05)" />
               </div>
@@ -476,7 +670,7 @@ export default function App() {
                   </tbody>
                 </table>
                 <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
-                  Variable P&L = Net Fees + Resets − Payouts − Platform. Add fixed costs (${((employeeCost + marketingCost) / 1000).toFixed(0)}K) for full P&L.
+                  Variable P&L = Net Fees + Resets − Payouts − Platform. Add fixed costs (${((employeeCost + marketingCost) / 1000).toFixed(0)}K){results.extras > 0 ? ` + extra costs (${$(results.extras)})` : ""} for full P&L.
                 </div>
               </div>
             </div>
@@ -491,7 +685,6 @@ export default function App() {
                 { l: "Revenue / Account", v: $(results.revenue / totalAccounts), c: "#94a3b8" },
                 { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },
                 { l: "Net / Account", v: $(results.net / totalAccounts), c: results.net > 0 ? "#22c55e" : "#ef4444" },
-                { l: "Worst Run (of 200)", v: $(results.netMin), c: results.netMin > 0 ? "#22c55e" : "#ef4444", sub: "Worst single Monte Carlo run" },
               ].map(({ l, v, c, sub }) => (
                 <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
                   <div style={{ fontSize: 9, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>{l}</div>

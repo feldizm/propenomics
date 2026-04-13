@@ -51,7 +51,8 @@ function simFundedPhase(accountSize, rng, fundedPayoutPct, avgPayoutPct) {
 
 function runSim(params, seed, runs = 200) {
   const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
-    affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate } = params;
+    affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate,
+    extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
   const allRuns = [];
@@ -103,11 +104,14 @@ function runSim(params, seed, runs = 200) {
     const totalPlatform = totalAccounts * platformCost;
     const fixed = employeeCost + marketingCost;
     const totalRev = (grossFees - discounts - affComm) + resetRev;
-    const totalCost = payouts + totalPlatform + fixed;
+    const extras = computeExtras(extraCosts, {
+      totalAccounts, passers, payoutTraders, grossFees, totalRev,
+    });
+    const totalCost = payouts + totalPlatform + fixed + extras.total;
     const net = totalRev - totalCost;
 
     allRuns.push({ grossFees, discounts, affComm, resetRev, payouts, payoutTraders,
-      totalPlatform, fixed, totalRev, totalCost, net, passers, resetCount, sd,
+      totalPlatform, fixed, extras, totalRev, totalCost, net, passers, resetCount, sd,
       margin: totalRev > 0 ? net / totalRev * 100 : 0 });
   }
 
@@ -119,6 +123,10 @@ function runSim(params, seed, runs = 200) {
     affComm: avg(r => r.affComm), netFees: avg(r => r.grossFees) - avg(r => r.discounts) - avg(r => r.affComm),
     resetRev: avg(r => r.resetRev), payouts: avg(r => r.payouts),
     platform: avg(r => r.totalPlatform), fixed: avg(r => r.fixed),
+    extras: avg(r => r.extras.total),
+    extrasBreakdown: Object.fromEntries(
+      extraCosts.map(c => [c.id, avg(r => r.extras.bd[c.id] || 0)])
+    ),
     revenue: avg(r => r.totalRev), costs: avg(r => r.totalCost),
     net: avg(r => r.net), margin: avg(r => r.margin),
     profitable: allRuns.filter(r => r.net > 0).length, total: runs,
@@ -158,6 +166,39 @@ const parseNum = (str) => {
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 };
+
+// Extra costs — user-definable overhead lines. Each type scales against a
+// different simulation quantity, so a single $ amount can represent very
+// different real-world costs (flat rent vs. per-funded-trader KYC, etc.).
+const COST_TYPES = {
+  fixed:       { label: "Fixed $",         short: "$",        desc: "Flat dollar amount" },
+  per_account: { label: "$ per account",   short: "$/acct",   desc: "× total accounts sold" },
+  per_passer:  { label: "$ per passer",    short: "$/passer", desc: "× traders who pass eval" },
+  per_payout:  { label: "$ per payout",    short: "$/payout", desc: "× traders receiving payouts" },
+  pct_revenue: { label: "% of revenue",    short: "% rev",    desc: "% of total revenue" },
+  pct_fees:    { label: "% of gross fees", short: "% fees",   desc: "% of gross fee revenue" },
+};
+
+function computeExtras(extras, ctx) {
+  let total = 0;
+  const bd = {};
+  for (const c of extras) {
+    const a = Number(c.amount) || 0;
+    let v = 0;
+    switch (c.type) {
+      case "fixed":       v = a; break;
+      case "per_account": v = a * ctx.totalAccounts; break;
+      case "per_passer":  v = a * ctx.passers; break;
+      case "per_payout":  v = a * ctx.payoutTraders; break;
+      case "pct_revenue": v = (a / 100) * ctx.totalRev; break;
+      case "pct_fees":    v = (a / 100) * ctx.grossFees; break;
+      default: v = 0;
+    }
+    total += v;
+    bd[c.id] = v;
+  }
+  return { total, bd };
+}
 
 const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
   const [editing, setEditing] = useState(false);
@@ -208,6 +249,90 @@ const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
   );
 };
 
+const presetBtnStyle = {
+  padding: "6px 12px", background: "rgba(255,255,255,0.04)", color: "#94a3b8",
+  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
+  fontWeight: 600, fontSize: 10, cursor: "pointer", letterSpacing: "0.02em",
+};
+
+const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
+  const [editAmount, setEditAmount] = useState(false);
+  const [rawAmount, setRawAmount] = useState(String(cost.amount));
+  const isPct = cost.type === "pct_revenue" || cost.type === "pct_fees";
+
+  return (
+    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+      <td style={{ padding: "6px 5px" }}>
+        <input
+          type="text"
+          value={cost.name}
+          onChange={e => onUpdate("name", e.target.value)}
+          placeholder="Cost name"
+          style={{
+            width: "100%", minWidth: 140, padding: "5px 7px",
+            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 4, color: "#e2e8f0", fontFamily: "'Inter'",
+            fontSize: 11, fontWeight: 500,
+          }}
+        />
+      </td>
+      <td style={{ padding: "6px 5px", textAlign: "right" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
+          {!isPct && <span style={{ fontSize: 11, color: "#475569" }}>$</span>}
+          <input
+            type="text"
+            inputMode="decimal"
+            value={editAmount ? rawAmount : fmtNum(cost.amount)}
+            onFocus={() => { setEditAmount(true); setRawAmount(String(cost.amount)); }}
+            onBlur={() => { setEditAmount(false); onUpdate("amount", parseNum(rawAmount)); }}
+            onChange={e => setRawAmount(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && e.target.blur()}
+            style={{
+              width: 90, padding: "5px 7px", background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#60a5fa",
+              fontFamily: "'JetBrains Mono'", fontSize: 11, fontWeight: 600, textAlign: "right",
+            }}
+          />
+          {isPct && <span style={{ fontSize: 11, color: "#475569" }}>%</span>}
+        </div>
+      </td>
+      <td style={{ padding: "6px 5px" }}>
+        <select
+          value={cost.type}
+          onChange={e => onUpdate("type", e.target.value)}
+          title={COST_TYPES[cost.type]?.desc}
+          style={{
+            padding: "5px 7px", background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#e2e8f0",
+            fontFamily: "'Inter'", fontSize: 11, fontWeight: 500, cursor: "pointer",
+          }}
+        >
+          {Object.entries(COST_TYPES).map(([k, v]) => (
+            <option key={k} value={k} style={{ background: "#0f172a" }}>{v.label}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{
+        padding: "6px 5px", textAlign: "right",
+        fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444",
+      }}>
+        {impact != null ? $(impact) : "—"}
+      </td>
+      <td style={{ padding: "6px 5px", textAlign: "center" }}>
+        <button
+          onClick={onRemove}
+          title="Remove cost"
+          style={{
+            padding: "3px 9px", background: "rgba(239,68,68,0.1)", color: "#ef4444",
+            border: "1px solid rgba(239,68,68,0.2)", borderRadius: 4, cursor: "pointer",
+            fontSize: 14, fontWeight: 700, lineHeight: 1,
+          }}
+        >×</button>
+      </td>
+    </tr>
+  );
+};
+
 export default function App() {
   const [seed, setSeed] = useState(42);
   const [passRate, setPassRate] = useState(10);
@@ -232,11 +357,29 @@ export default function App() {
   const [resetDiscount, setResetDiscount] = useState(80);
   const [resetRate, setResetRate] = useState(35);
 
+  // Extra user-defined costs / overheads / parameters
+  const [extraCosts, setExtraCosts] = useState([]);
+
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const updateDist = (idx, field, val) => {
     setDist(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
+  };
+
+  const addExtraCost = (preset) => {
+    setExtraCosts(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      name: preset?.name || "New Cost",
+      amount: preset?.amount ?? 0,
+      type: preset?.type || "fixed",
+    }]);
+  };
+  const updateExtraCost = (id, field, val) => {
+    setExtraCosts(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c));
+  };
+  const removeExtraCost = (id) => {
+    setExtraCosts(prev => prev.filter(c => c.id !== id));
   };
 
   const totalAccounts = dist.reduce((s, d) => s + d.count, 0);
@@ -250,11 +393,12 @@ export default function App() {
         affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
         marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
         resetRate: resetRate / 100,
+        extraCosts,
       }, seed);
       setResults(r); setLoading(false);
     }, 150);
   }, [seed, passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate]);
+      affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate, extraCosts]);
 
   useEffect(() => { run(); }, []);
 
@@ -364,6 +508,83 @@ export default function App() {
           </div>
         </div>
 
+        {/* ==================== EXTRA COSTS ==================== */}
+        <div style={{
+          padding: 14, marginBottom: 20, background: "rgba(167,139,250,0.03)",
+          border: "1px solid rgba(167,139,250,0.15)", borderRadius: 8,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Extra Costs & Overheads
+              </h3>
+              <div style={{ fontSize: 9, color: "#64748b", marginTop: 3, maxWidth: 560 }}>
+                Add custom cost lines — rent, SaaS, legal, KYC/onboarding, payment processing, rev-share, tax accrual, etc. Each line scales against its chosen base (flat $, per account, per passer, per payout, % of revenue, or % of fees).
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button
+                onClick={() => addExtraCost({ name: "Rent & Utilities", amount: 5000, type: "fixed" })}
+                style={presetBtnStyle}
+              >+ Rent</button>
+              <button
+                onClick={() => addExtraCost({ name: "Payment Processing", amount: 3, type: "pct_fees" })}
+                style={presetBtnStyle}
+              >+ Payment %</button>
+              <button
+                onClick={() => addExtraCost({ name: "KYC / Onboarding", amount: 15, type: "per_passer" })}
+                style={presetBtnStyle}
+              >+ KYC</button>
+              <button
+                onClick={() => addExtraCost()}
+                style={{
+                  padding: "6px 14px", background: "rgba(167,139,250,0.2)", color: "#c4b5fd",
+                  border: "1px solid rgba(167,139,250,0.4)", borderRadius: 4,
+                  fontWeight: 700, fontSize: 11, cursor: "pointer",
+                }}
+              >+ Add Cost</button>
+            </div>
+          </div>
+
+          {extraCosts.length === 0 ? (
+            <div style={{ fontSize: 11, color: "#475569", padding: "14px 0", textAlign: "center", fontStyle: "italic" }}>
+              No extra costs configured. Click a quick-add button or "Add Cost" to start.
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <th style={{ padding: "5px 5px", textAlign: "left", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Name</th>
+                  <th style={{ padding: "5px 5px", textAlign: "right", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Amount</th>
+                  <th style={{ padding: "5px 5px", textAlign: "left", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Type</th>
+                  <th style={{ padding: "5px 5px", textAlign: "right", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Impact (avg)</th>
+                  <th style={{ padding: "5px 5px", width: 40 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {extraCosts.map(c => (
+                  <ExtraCostRow
+                    key={c.id}
+                    cost={c}
+                    onUpdate={(f, v) => updateExtraCost(c.id, f, v)}
+                    onRemove={() => removeExtraCost(c.id)}
+                    impact={results?.extrasBreakdown?.[c.id]}
+                  />
+                ))}
+                <tr style={{ borderTop: "1px solid rgba(255,255,255,0.1)", background: "rgba(167,139,250,0.04)" }}>
+                  <td colSpan={3} style={{ padding: "8px 5px", fontSize: 10, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    Total Extra Costs ({extraCosts.length})
+                  </td>
+                  <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: "#ef4444" }}>
+                    {results ? $(results.extras) : "—"}
+                  </td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+
         {/* Run button */}
         <div style={{ marginBottom: 20 }}>
           <button onClick={run} disabled={loading}
@@ -418,6 +639,21 @@ export default function App() {
                 <Row label="Employees" value={employeeCost} indent color="#f59e0b" />
                 <Row label="Marketing" value={marketingCost} indent color="#f59e0b" />
                 <Row label="= Fixed + Platform" value={results.fixed + results.platform} bold bg="rgba(255,255,255,0.03)" />
+                {extraCosts.length > 0 && (
+                  <>
+                    <div style={{ height: 6 }} />
+                    {extraCosts.map(c => (
+                      <Row
+                        key={c.id}
+                        label={`${c.name || "Extra"} (${COST_TYPES[c.type]?.short || ""})`}
+                        value={results.extrasBreakdown?.[c.id] || 0}
+                        indent
+                        color="#a78bfa"
+                      />
+                    ))}
+                    <Row label="= Extra Costs" value={results.extras} bold color="#a78bfa" bg="rgba(167,139,250,0.05)" />
+                  </>
+                )}
                 <div style={{ height: 6 }} />
                 <Row label="TOTAL COSTS" value={results.costs} bold color="#ef4444" bg="rgba(239,68,68,0.05)" />
               </div>
@@ -476,7 +712,7 @@ export default function App() {
                   </tbody>
                 </table>
                 <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
-                  Variable P&L = Net Fees + Resets − Payouts − Platform. Add fixed costs (${((employeeCost + marketingCost) / 1000).toFixed(0)}K) for full P&L.
+                  Variable P&L = Net Fees + Resets − Payouts − Platform. Add fixed costs (${((employeeCost + marketingCost) / 1000).toFixed(0)}K){results.extras > 0 ? ` + extra costs (${$(results.extras)})` : ""} for full P&L.
                 </div>
               </div>
             </div>

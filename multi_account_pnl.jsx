@@ -1,147 +1,111 @@
 import { useState, useCallback, useEffect } from "react";
 
-const DD = 0.06;
-const LEVERAGE = 30;
 const PAYOUT_CAP_PCT = 0.05;
-const FUNDED_DAYS = 180;
-const BIWEEKLY = 14;
+const PAYOUT_FLOOR_PCT = 0.001;
+const PAYOUT_LOG_SIGMA = 0.6;
+// genPayout used cycle probs: P(1)=0.55, P(2)=0.30, P(3)=0.15
+const E_CYCLES = 0.55 * 1 + 0.30 * 2 + 0.15 * 3; // 1.60
 
-function mulberry32(a) {
-  return function() {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function gauss(rng) {
-  let u = 0, v = 0;
-  while (!u) u = rng(); while (!v) v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-function genPayout(accountSize, rng, avgPayoutPct) {
-  const cycleRoll = rng();
-  const cycles = cycleRoll < 0.55 ? 1 : cycleRoll < 0.85 ? 2 : 3;
-  const cap = accountSize * PAYOUT_CAP_PCT;
-  const logMean = Math.log(accountSize * avgPayoutPct);
-  const logSigma = 0.6;
-  let total = 0;
-  for (let c = 0; c < cycles; c++) {
-    const raw = Math.exp(logMean + gauss(rng) * logSigma);
-    total += Math.max(accountSize * 0.001, Math.min(raw, cap));
-  }
-  return { total, cycles };
+// Standard normal CDF — Abramowitz & Stegun 7.1.26 (~1.5e-7 accuracy).
+function normCdf(x) {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + p * ax);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
+  return 0.5 * (1 + sign * y);
 }
 
-function simFundedPhase(accountSize, rng, fundedPayoutPct, avgPayoutPct) {
-  if (rng() >= fundedPayoutPct) {
-    let eq = accountSize, hwm = accountSize;
-    const ls = LEVERAGE / 20;
-    for (let d = 1; d <= FUNDED_DAYS; d++) {
-      eq *= (1 + -0.0005 + gauss(rng) * 0.016 * ls);
-      hwm = Math.max(hwm, eq);
-      if (eq <= hwm * (1 - DD)) return { paid: 0, nPay: 0 };
-    }
-    return { paid: 0, nPay: 0 };
-  }
-  const p = genPayout(accountSize, rng, avgPayoutPct);
-  return { paid: p.total, nPay: p.cycles };
+// Closed-form E[clip(X, lo, hi)] for X ~ LogNormal(mu, sigma²).
+// Derivation: split the expectation into lo·P(X<lo) + ∫[lo,hi] x·f(x)dx + hi·P(X>hi).
+// The middle integral is exp(mu + σ²/2) · (Φ((ln(hi)−μ−σ²)/σ) − Φ((ln(lo)−μ−σ²)/σ)).
+function expectedClippedLognormal(mu, sigma, lo, hi) {
+  const zLo = (Math.log(lo) - mu) / sigma;
+  const zHi = (Math.log(hi) - mu) / sigma;
+  const zLoShift = zLo - sigma;
+  const zHiShift = zHi - sigma;
+  const pBelow = normCdf(zLo);
+  const pAbove = 1 - normCdf(zHi);
+  const meanUncapped = Math.exp(mu + 0.5 * sigma * sigma);
+  const meanInRange = meanUncapped * (normCdf(zHiShift) - normCdf(zLoShift));
+  return lo * pBelow + meanInRange + hi * pAbove;
 }
 
-function runSim(params, seed, runs = 200) {
+function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
+  const mu = Math.log(accountSize * medianPayoutPct);
+  const lo = accountSize * PAYOUT_FLOOR_PCT;
+  const hi = accountSize * PAYOUT_CAP_PCT;
+  const perCycle = expectedClippedLognormal(mu, PAYOUT_LOG_SIGMA, lo, hi);
+  return E_CYCLES * perCycle;
+}
+
+function runSim(params) {
   const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
     affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate,
     extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
-  const allRuns = [];
 
-  for (let r = 0; r < runs; r++) {
-    const rng = mulberry32(seed + r);
-    let grossFees = 0, discounts = 0, affComm = 0, resetRev = 0, payouts = 0;
-    let payoutTraders = 0, resetCount = 0, passers = 0;
-    const sd = {};
+  let grossFees = 0, discounts = 0, affComm = 0, resetRev = 0, payouts = 0;
+  let passers = 0, payoutTraders = 0, resetCount = 0;
+  const sd = {};
 
-    for (const sz of sizes) {
-      const n = sz.count;
-      if (n === 0) continue;
-      const pc = Math.round(n * passRate / 100);
-      const fc = n - pc;
-      passers += pc;
+  for (const sz of sizes) {
+    const n = sz.count;
+    if (n === 0) continue;
 
-      const affSales = Math.round(n * affiliateShare);
-      const mktSales = n - affSales;
-      const gf = n * sz.fee;
-      const disc = mktSales * sz.fee * marketingDiscount;
-      const ac = affSales * sz.fee * affiliateComm;
-      const nf = gf - disc - ac;
+    const pc = Math.round(n * passRate / 100);
+    const fc = n - pc;
+    passers += pc;
 
-      grossFees += gf; discounts += disc; affComm += ac;
+    // Fees — deterministic. Marketing discount applies to non-affiliate
+    // sales only; affiliate sales pay full price then rebate a commission.
+    const affSales = Math.round(n * affiliateShare);
+    const mktSales = n - affSales;
+    const gf = n * sz.fee;
+    const disc = mktSales * sz.fee * marketingDiscount;
+    const ac = affSales * sz.fee * affiliateComm;
+    const nf = gf - disc - ac;
+    grossFees += gf; discounts += disc; affComm += ac;
 
-      let sizeResetRev = 0, sizeResetCount = 0;
-      for (let i = 0; i < fc; i++) {
-        if (rng() < resetRate) {
-          const rf = sz.fee * resetDiscount;
-          const isAff = rng() < affiliateShare;
-          sizeResetRev += isAff ? rf * (1 - affiliateComm) : rf;
-          sizeResetCount++;
-        }
-      }
-      resetRev += sizeResetRev; resetCount += sizeResetCount;
+    // Expected resets: fc Bernoulli(resetRate) trials, each reset has
+    // probability affiliateShare of being an affiliate sale (which nets
+    // reset fee minus commission).
+    const sizeResetCount = fc * resetRate;
+    const effPerReset = sz.fee * resetDiscount * (1 - affiliateShare * affiliateComm);
+    const sizeResetRev = sizeResetCount * effPerReset;
+    resetRev += sizeResetRev;
+    resetCount += sizeResetCount;
 
-      let sizePaid = 0, sizePT = 0;
-      for (let i = 0; i < pc; i++) {
-        const f = simFundedPhase(sz.size, rng, fundedPct / 100, avgPayoutPct);
-        sizePaid += f.paid;
-        if (f.nPay > 0) sizePT++;
-      }
-      payouts += sizePaid; payoutTraders += sizePT;
+    // Expected payouts: of the `pc` passers, a fraction `fundedPct` ever
+    // collect; each collector earns E[clipped lognormal] · E[cycles].
+    const sizePT = pc * fundedPct;
+    const sizePaid = sizePT * expectedPayoutPerTrader(sz.size, avgPayoutPct);
+    payouts += sizePaid;
+    payoutTraders += sizePT;
 
-      sd[sz.size] = { gf, disc, ac, nf, resetRev: sizeResetRev, payouts: sizePaid, pt: sizePT, pc, n };
-    }
-
-    const totalPlatform = totalAccounts * platformCost;
-    const fixed = employeeCost + marketingCost;
-    const totalRev = (grossFees - discounts - affComm) + resetRev;
-    const extras = computeExtras(extraCosts, {
-      totalAccounts, passers, payoutTraders, grossFees, totalRev,
-    });
-    const totalCost = payouts + totalPlatform + fixed + extras.total;
-    const net = totalRev - totalCost;
-
-    allRuns.push({ grossFees, discounts, affComm, resetRev, payouts, payoutTraders,
-      totalPlatform, fixed, extras, totalRev, totalCost, net, passers, resetCount, sd,
-      margin: totalRev > 0 ? net / totalRev * 100 : 0 });
+    sd[sz.size] = { gf, disc, ac, nf, resetRev: sizeResetRev, payouts: sizePaid, pt: sizePT, pc, n };
   }
 
-  const avg = (fn) => allRuns.reduce((s, r) => s + fn(r), 0) / runs;
-  const sorted = allRuns.map(r => r.net).sort((a, b) => a - b);
+  const totalPlatform = totalAccounts * platformCost;
+  const fixed = employeeCost + marketingCost;
+  const totalRev = (grossFees - discounts - affComm) + resetRev;
+  const extras = computeExtras(extraCosts, {
+    totalAccounts, passers, payoutTraders, grossFees, totalRev,
+  });
+  const totalCost = payouts + totalPlatform + fixed + extras.total;
+  const net = totalRev - totalCost;
 
   return {
-    grossFees: avg(r => r.grossFees), discounts: avg(r => r.discounts),
-    affComm: avg(r => r.affComm), netFees: avg(r => r.grossFees) - avg(r => r.discounts) - avg(r => r.affComm),
-    resetRev: avg(r => r.resetRev), payouts: avg(r => r.payouts),
-    platform: avg(r => r.totalPlatform), fixed: avg(r => r.fixed),
-    extras: avg(r => r.extras.total),
-    extrasBreakdown: Object.fromEntries(
-      extraCosts.map(c => [c.id, avg(r => r.extras.bd[c.id] || 0)])
-    ),
-    revenue: avg(r => r.totalRev), costs: avg(r => r.totalCost),
-    net: avg(r => r.net), margin: avg(r => r.margin),
-    profitable: allRuns.filter(r => r.net > 0).length, total: runs,
-    netMin: sorted[0], netMax: sorted[sorted.length - 1],
-    net5: sorted[Math.floor(runs * 0.05)], net95: sorted[Math.floor(runs * 0.95)],
-    median: sorted[Math.floor(runs / 2)],
-    passers: avg(r => r.passers), payoutTraders: avg(r => r.payoutTraders),
-    resets: avg(r => r.resetCount), totalAccounts,
-    sizeAvg: Object.fromEntries(sizes.map(sz => [sz.size, {
-      gf: avg(r => r.sd[sz.size]?.gf || 0), disc: avg(r => r.sd[sz.size]?.disc || 0),
-      ac: avg(r => r.sd[sz.size]?.ac || 0), nf: avg(r => r.sd[sz.size]?.nf || 0),
-      resetRev: avg(r => r.sd[sz.size]?.resetRev || 0), payouts: avg(r => r.sd[sz.size]?.payouts || 0),
-      pt: avg(r => r.sd[sz.size]?.pt || 0), pc: avg(r => r.sd[sz.size]?.pc || 0),
-      n: sz.count,
-    }])),
+    grossFees, discounts, affComm, netFees: grossFees - discounts - affComm,
+    resetRev, payouts,
+    platform: totalPlatform, fixed,
+    extras: extras.total, extrasBreakdown: extras.bd,
+    revenue: totalRev, costs: totalCost,
+    net, margin: totalRev > 0 ? (net / totalRev) * 100 : 0,
+    passers, payoutTraders, resets: resetCount, totalAccounts,
+    sizeAvg: sd,
   };
 }
 
@@ -334,7 +298,6 @@ const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
 };
 
 export default function App() {
-  const [seed, setSeed] = useState(42);
   const [passRate, setPassRate] = useState(10);
   const [fundedPct, setFundedPct] = useState(10);
   const [avgPayoutPct, setAvgPayoutPct] = useState(5); // median per-cycle payout as % of account
@@ -361,7 +324,6 @@ export default function App() {
   const [extraCosts, setExtraCosts] = useState([]);
 
   const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
 
   const updateDist = (idx, field, val) => {
     setDist(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
@@ -385,19 +347,15 @@ export default function App() {
   const totalAccounts = dist.reduce((s, d) => s + d.count, 0);
 
   const run = useCallback(() => {
-    setLoading(true); setResults(null);
-    setTimeout(() => {
-      const r = runSim({
-        sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
-        platformCost, employeeCost, marketingCost,
-        affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
-        marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
-        resetRate: resetRate / 100,
-        extraCosts,
-      }, seed);
-      setResults(r); setLoading(false);
-    }, 150);
-  }, [seed, passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
+    setResults(runSim({
+      sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
+      platformCost, employeeCost, marketingCost,
+      affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
+      marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
+      resetRate: resetRate / 100,
+      extraCosts,
+    }));
+  }, [passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
       affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate, extraCosts]);
 
   useEffect(() => { run(); }, []);
@@ -424,7 +382,7 @@ export default function App() {
           CXM Freedom — Full P&L Simulator
         </h1>
         <p style={{ fontSize: 11, color: "#475569", margin: "0 0 16px" }}>
-          All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. 200 Monte Carlo runs.
+          All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. Deterministic expected-value model.
         </p>
 
         {/* ==================== INPUT PANELS ==================== */}
@@ -587,13 +545,13 @@ export default function App() {
 
         {/* Run button */}
         <div style={{ marginBottom: 20 }}>
-          <button onClick={run} disabled={loading}
+          <button onClick={run}
             style={{
-              padding: "10px 32px", background: loading ? "#1e293b" : "#22c55e",
-              color: loading ? "#64748b" : "#000", border: "none", borderRadius: 6,
+              padding: "10px 32px", background: "#22c55e",
+              color: "#000", border: "none", borderRadius: 6,
               fontWeight: 800, fontSize: 13, cursor: "pointer", width: "100%",
             }}>
-            {loading ? "Running 200 simulations…" : `Run Monte Carlo — ${totalAccounts.toLocaleString()} Accounts`}
+            {`Recalculate — ${totalAccounts.toLocaleString()} Accounts`}
           </button>
         </div>
 
@@ -613,7 +571,7 @@ export default function App() {
                 {$(results.net)}
               </div>
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                {results.margin.toFixed(1)}% margin · {results.profitable}/200 profitable · 5th–95th: {$(results.net5)} to {$(results.net95)}
+                {results.margin.toFixed(1)}% margin · Revenue {$(results.revenue)} · Costs {$(results.costs)}
               </div>
             </div>
 
@@ -727,7 +685,6 @@ export default function App() {
                 { l: "Revenue / Account", v: $(results.revenue / totalAccounts), c: "#94a3b8" },
                 { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },
                 { l: "Net / Account", v: $(results.net / totalAccounts), c: results.net > 0 ? "#22c55e" : "#ef4444" },
-                { l: "Worst Run (of 200)", v: $(results.netMin), c: results.netMin > 0 ? "#22c55e" : "#ef4444", sub: "Worst single Monte Carlo run" },
               ].map(({ l, v, c, sub }) => (
                 <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
                   <div style={{ fontSize: 9, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>{l}</div>

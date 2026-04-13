@@ -80,7 +80,9 @@ function runSim(params) {
 
     // Expected payouts: of the `pc` passers, a fraction `fundedPct` ever
     // collect; each collector earns E[clipped lognormal] · E[cycles].
-    const sizePT = pc * fundedPct;
+    // fundedPct is supplied as a percentage (e.g. 10 for 10%), matching
+    // passRate's treatment above.
+    const sizePT = pc * fundedPct / 100;
     const sizePaid = sizePT * expectedPayoutPerTrader(sz.size, avgPayoutPct);
     payouts += sizePaid;
     payoutTraders += sizePT;

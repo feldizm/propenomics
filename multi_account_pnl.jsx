@@ -168,6 +168,27 @@ function computeExtras(extras, ctx) {
   return { total, bd };
 }
 
+const FEE_SIZE_SCHEDULE = [
+  { fee: 167,  size: 10000 },
+  { fee: 397,  size: 25000 },
+  { fee: 747,  size: 50000 },
+  { fee: 1197, size: 100000 },
+];
+
+function interpolateSize(fee) {
+  const s = FEE_SIZE_SCHEDULE;
+  if (fee <= s[0].fee) return Math.max(1000, Math.round(s[0].size * (fee / s[0].fee)));
+  for (let i = 1; i < s.length; i++) {
+    if (fee <= s[i].fee) {
+      const t = (fee - s[i - 1].fee) / (s[i].fee - s[i - 1].fee);
+      return Math.round(s[i - 1].size + t * (s[i].size - s[i - 1].size));
+    }
+  }
+  const last = s[s.length - 1], prev = s[s.length - 2];
+  const t = (fee - prev.fee) / (last.fee - prev.fee);
+  return Math.round(prev.size + t * (last.size - prev.size));
+}
+
 const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState(String(value));
@@ -372,6 +393,16 @@ export default function App() {
     { size: 100000, fee: 1197, count: 1000, discount: 15, label: "$100K", color: "#f59e0b" },
   ]);
 
+  // Calc mode: "perSize" (existing per-tier) or "aov" (average order value)
+  const [calcMode, setCalcMode] = useState("perSize");
+  const [aovAccounts, setAovAccounts] = useState(4000);
+  const [aovFee, setAovFee] = useState(500);
+  const [aovDiscount, setAovDiscount] = useState(15);
+
+  // Multi-month projection
+  const [months, setMonths] = useState(1);
+  const [growthRate, setGrowthRate] = useState(0);
+
   // Costs
   const [platformCost, setPlatformCost] = useState(2.75);
   const [employeeCost, setEmployeeCost] = useState(30000);
@@ -385,6 +416,7 @@ export default function App() {
   const [extraCosts, setExtraCosts] = useState([]);
 
   const [results, setResults] = useState(null);
+  const [projection, setProjection] = useState(null);
 
   const updateDist = (idx, field, val) => {
     setDist(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
@@ -405,19 +437,46 @@ export default function App() {
     setExtraCosts(prev => prev.filter(c => c.id !== id));
   };
 
-  const totalAccounts = dist.reduce((s, d) => s + d.count, 0);
+  const aovSize = interpolateSize(aovFee);
+  const effectiveSizes = calcMode === "aov"
+    ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
+    : dist;
+  const totalAccounts = effectiveSizes.reduce((s, d) => s + d.count, 0);
 
   const run = useCallback(() => {
-    setResults(runSim({
-      sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
+    const baseParams = {
+      sizes: effectiveSizes, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
       platformCost, employeeCost, marketingCost,
       affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
       resetDiscount: resetDiscount / 100,
       resetRate: resetRate / 100,
       extraCosts,
-    }));
-  }, [passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, resetDiscount, resetRate, extraCosts]);
+    };
+
+    if (months <= 1) {
+      setResults(runSim(baseParams));
+      setProjection(null);
+    } else {
+      const monthly = [];
+      let cumNet = 0, cumRev = 0, cumCost = 0;
+      for (let m = 0; m < months; m++) {
+        const growth = Math.pow(1 + growthRate / 100, m);
+        const params = {
+          ...baseParams,
+          sizes: baseParams.sizes.map(sz => ({ ...sz, count: Math.round(sz.count * growth) })),
+        };
+        const r = runSim(params);
+        cumNet += r.net;
+        cumRev += r.revenue;
+        cumCost += r.costs;
+        monthly.push({ month: m + 1, ...r, cumNet, cumRev, cumCost });
+      }
+      setResults(monthly[0]);
+      setProjection(monthly);
+    }
+  }, [passRate, fundedPct, avgPayoutPct, effectiveSizes, platformCost, employeeCost, marketingCost,
+      affiliateShare, affiliateComm, resetDiscount, resetRate, extraCosts, months, growthRate,
+      calcMode, aovAccounts, aovFee, aovDiscount]);
 
   useEffect(() => { run(); }, []);
 
@@ -451,29 +510,60 @@ export default function App() {
 
           {/* Account Distribution */}
           <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-            <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Account Distribution</h3>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-              <thead>
-                <tr>
-                  {["Size", "Fee", "Qty", "Disc"].map(h => (
-                    <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dist.map((d, i) => (
-                  <AccountSizeRow
-                    key={d.size}
-                    d={d}
-                    onUpdate={(field, val) => updateDist(i, field, val)}
-                  />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>Accounts</h3>
+              <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)" }}>
+                {[["perSize", "Per Size"], ["aov", "AOV"]].map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setCalcMode(k)}
+                    style={{
+                      padding: "4px 10px", fontSize: 9, fontWeight: 700, cursor: "pointer",
+                      border: "none", letterSpacing: "0.04em",
+                      background: calcMode === k ? "#3b82f6" : "rgba(255,255,255,0.04)",
+                      color: calcMode === k ? "#fff" : "#64748b",
+                    }}
+                  >{label}</button>
                 ))}
-              </tbody>
-            </table>
-            <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
-              <span>Total:</span>
-              <span style={{ fontWeight: 700 }}>{totalAccounts.toLocaleString()} accounts</span>
+              </div>
             </div>
+
+            {calcMode === "perSize" ? (
+              <>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead>
+                    <tr>
+                      {["Size", "Fee", "Qty", "Disc"].map(h => (
+                        <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dist.map((d, i) => (
+                      <AccountSizeRow
+                        key={d.size}
+                        d={d}
+                        onUpdate={(field, val) => updateDist(i, field, val)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
+                  <span>Total:</span>
+                  <span style={{ fontWeight: 700 }}>{totalAccounts.toLocaleString()} accounts</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Input label="Total Accounts / Month" value={aovAccounts} onChange={setAovAccounts} width={80} />
+                <Input label="Avg Order Value (Fee)" value={aovFee} onChange={setAovFee} prefix="$" width={80} />
+                <Input label="Marketing Discount" value={aovDiscount} onChange={setAovDiscount} suffix="%" width={50} />
+                <div style={{ fontSize: 9, color: "#475569", lineHeight: 1.5, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8, marginTop: 2 }}>
+                  Interpolated account size: <span style={{ color: "#10b981", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>${aovSize.toLocaleString()}</span>
+                  <br />Uses a single blended tier. Fee ${aovFee} maps to ~${Math.round(aovSize / 1000)}K account via the tier schedule.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Trading Params */}
@@ -486,8 +576,15 @@ export default function App() {
               <Input label="Reset Rate" value={resetRate} onChange={setResetRate} suffix="%" width={60} />
               <Input label="Reset Price" value={resetDiscount} onChange={setResetDiscount} suffix="% of fee" width={60} />
             </div>
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 10, paddingTop: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Projection</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <Input label="Months" value={months} onChange={v => setMonths(Math.max(1, Math.round(v)))} width={50} />
+                <Input label="Growth / Month" value={growthRate} onChange={setGrowthRate} suffix="%" width={50} />
+              </div>
+            </div>
             <div style={{ fontSize: 9, color: "#475569", marginTop: 6, lineHeight: 1.4 }}>
-              Avg Payout Size: median per-cycle payout as % of account. 1.5% = $150 on $10K, $1,500 on $100K. Capped at 5% per cycle.
+              Avg Payout Size: median per-cycle payout as % of account. Capped at 5% per cycle. Set Months &gt; 1 to project cash flow.
             </div>
           </div>
 
@@ -592,34 +689,52 @@ export default function App() {
               color: "#000", border: "none", borderRadius: 6,
               fontWeight: 800, fontSize: 13, cursor: "pointer", width: "100%",
             }}>
-            {`Recalculate — ${totalAccounts.toLocaleString()} Accounts`}
+            {months > 1
+              ? `Recalculate — ${totalAccounts.toLocaleString()} Accounts/mo × ${months} Months`
+              : `Recalculate — ${totalAccounts.toLocaleString()} Accounts`}
           </button>
         </div>
 
         {/* ==================== RESULTS ==================== */}
-        {results && (
+        {results && (() => {
+          const projTotals = projection ? {
+            net: projection.reduce((s, m) => s + m.net, 0),
+            revenue: projection.reduce((s, m) => s + m.revenue, 0),
+            costs: projection.reduce((s, m) => s + m.costs, 0),
+            totalAccounts: projection.reduce((s, m) => s + m.totalAccounts, 0),
+          } : null;
+          const heroNet = projTotals ? projTotals.net : results.net;
+          const heroRev = projTotals ? projTotals.revenue : results.revenue;
+          const heroCosts = projTotals ? projTotals.costs : results.costs;
+          const heroAccounts = projTotals ? projTotals.totalAccounts : totalAccounts;
+          const heroMargin = heroRev > 0 ? heroNet / heroRev * 100 : 0;
+          return (
           <>
             {/* Hero P&L */}
             <div style={{
               padding: 20, marginBottom: 20, borderRadius: 8,
-              background: results.net > 0 ? "rgba(34,197,94,0.05)" : "rgba(239,68,68,0.05)",
-              border: `2px solid ${results.net > 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+              background: heroNet > 0 ? "rgba(34,197,94,0.05)" : "rgba(239,68,68,0.05)",
+              border: `2px solid ${heroNet > 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
             }}>
               <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                Net P&L — {totalAccounts.toLocaleString()} Accounts @ {passRate}% Pass / {fundedPct}% Funded Payout
+                {projection
+                  ? `${months}-Month P&L — ${heroAccounts.toLocaleString()} Total Accounts @ ${passRate}% Pass / ${fundedPct}% Funded Payout`
+                  : `Net P&L — ${totalAccounts.toLocaleString()} Accounts @ ${passRate}% Pass / ${fundedPct}% Funded Payout`
+                }
               </div>
-              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: results.net > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
-                {$(results.net)}
+              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: heroNet > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
+                {$(heroNet)}
               </div>
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                {results.margin.toFixed(1)}% margin · Revenue {$(results.revenue)} · Costs {$(results.costs)}
+                {heroMargin.toFixed(1)}% margin · Revenue {$(heroRev)} · Costs {$(heroCosts)}
+                {projection && ` · ${months} months${growthRate > 0 ? ` @ ${growthRate}%/mo growth` : ""}`}
               </div>
             </div>
 
             {/* P&L Waterfall */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
               <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue</h3>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue{projection ? " (Month 1)" : ""}</h3>
                 <Row label="Gross Fee Revenue" value={results.grossFees} bold color="#3b82f6" />
                 <Row label="Marketing Discounts (per program)" value={-results.discounts} indent color="#ef4444" />
                 <Row label={`Affiliate Commissions (${affiliateComm}%)`} value={-results.affComm} indent color="#ef4444" />
@@ -631,7 +746,7 @@ export default function App() {
               </div>
 
               <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs</h3>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs{projection ? " (Month 1)" : ""}</h3>
                 <Row label={`Trader Payouts (${Math.round(results.payoutTraders)} traders)`} value={results.payouts} color="#ef4444" />
                 <div style={{ height: 6 }} />
                 <Row label={`Platform ($${platformCost} × ${totalAccounts.toLocaleString()})`} value={results.platform} color="#f59e0b" />
@@ -661,7 +776,7 @@ export default function App() {
             {/* Per-size breakdown */}
             <div style={{ marginBottom: 24 }}>
               <h3 style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                By Account Size (variable costs only — fixed costs excluded)
+                {calcMode === "aov" ? "Blended Tier" : "By Account Size"} (variable costs only — fixed excluded){projection ? " — Month 1" : ""}
               </h3>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
@@ -673,7 +788,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dist.map(d => {
+                    {effectiveSizes.map(d => {
                       const s = results.sizeAvg[d.size];
                       if (!s) return null;
                       const varPnL = s.nf + s.resetRev - s.payouts - (d.count * platformCost);
@@ -719,8 +834,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* Key stats */}
+            {/* Key stats (Month 1 / single-month) */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 20 }}>
+              {projection && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "#64748b", fontWeight: 600, marginBottom: -4, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  Month 1 Unit Economics
+                </div>
+              )}
               {[
                 { l: "Passers", v: `${Math.round(results.passers)}`, c: "#94a3b8", sub: `${passRate}% of ${totalAccounts.toLocaleString()}` },
                 { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#94a3b8", sub: `${fundedPct}% of funded` },
@@ -737,8 +857,62 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            {/* Monthly projection table */}
+            {projection && projection.length > 1 && (
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  Monthly Cash Flow — {months} Months{growthRate > 0 ? ` @ ${growthRate}%/mo Growth` : ""}
+                </h3>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
+                        {["Month", "Accounts", "Revenue", "Costs", "Net P&L", "Cumulative"].map(h => (
+                          <th key={h} style={{
+                            padding: "6px 8px",
+                            textAlign: h === "Month" ? "center" : "right",
+                            fontSize: 8, fontWeight: 700, color: "#64748b",
+                            letterSpacing: "0.05em", textTransform: "uppercase",
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projection.map(m => (
+                        <tr key={m.month} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                          <td style={{ padding: "7px 8px", textAlign: "center", fontFamily: "'JetBrains Mono'", color: "#94a3b8", fontWeight: 600 }}>{m.month}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{m.totalAccounts.toLocaleString()}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#22c55e" }}>{$(m.revenue)}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>{$(m.costs)}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: m.net > 0 ? "#22c55e" : "#ef4444" }}>{$(m.net)}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: m.cumNet > 0 ? "#22c55e" : "#ef4444" }}>{$(m.cumNet)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ borderTop: "2px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.03)" }}>
+                        <td style={{ padding: "8px 8px", textAlign: "center", fontWeight: 800 }}>Total</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{projTotals.totalAccounts.toLocaleString()}</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#22c55e" }}>{$(projTotals.revenue)}</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>{$(projTotals.costs)}</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, fontSize: 12, color: projTotals.net > 0 ? "#22c55e" : "#ef4444" }}>{$(projTotals.net)}</td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {(() => {
+                  const beMonth = projection.findIndex(m => m.cumNet > 0);
+                  return beMonth > 0 ? (
+                    <div style={{ fontSize: 10, color: "#22c55e", marginTop: 6, fontWeight: 600 }}>
+                      Break-even at month {projection[beMonth].month} (cumulative turns positive at {$(projection[beMonth].cumNet)})
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
           </>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

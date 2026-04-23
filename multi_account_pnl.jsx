@@ -42,7 +42,7 @@ function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
 
 function runSim(params) {
   const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
-    affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate,
+    affiliateShare, affiliateComm, resetRate,
     extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
@@ -61,10 +61,12 @@ function runSim(params) {
 
     // Fees — deterministic. Marketing discount applies to non-affiliate
     // sales only; affiliate sales pay full price then rebate a commission.
+    // Each program (size) has its own discount percentage.
+    const sizeDiscount = (sz.discount ?? 0) / 100;
     const affSales = Math.round(n * affiliateShare);
     const mktSales = n - affSales;
     const gf = n * sz.fee;
-    const disc = mktSales * sz.fee * marketingDiscount;
+    const disc = mktSales * sz.fee * sizeDiscount;
     const ac = affSales * sz.fee * affiliateComm;
     const nf = gf - disc - ac;
     grossFees += gf; discounts += disc; affComm += ac;
@@ -73,7 +75,8 @@ function runSim(params) {
     // probability affiliateShare of being an affiliate sale (which nets
     // reset fee minus commission).
     const sizeResetCount = fc * resetRate;
-    const effPerReset = sz.fee * resetDiscount * (1 - affiliateShare * affiliateComm);
+    const sizeResetPct = (sz.resetPct ?? 80) / 100;
+    const effPerReset = sz.fee * sizeResetPct * (1 - affiliateShare * affiliateComm);
     const sizeResetRev = sizeResetCount * effPerReset;
     resetRev += sizeResetRev;
     resetCount += sizeResetCount;
@@ -87,7 +90,8 @@ function runSim(params) {
     payouts += sizePaid;
     payoutTraders += sizePT;
 
-    sd[sz.size] = { gf, disc, ac, nf, resetRev: sizeResetRev, payouts: sizePaid, pt: sizePT, pc, n };
+    const sdKey = sz.key || sz.size;
+    sd[sdKey] = { gf, disc, ac, nf, resetRev: sizeResetRev, payouts: sizePaid, pt: sizePT, pc, n };
   }
 
   const totalPlatform = totalAccounts * platformCost;
@@ -166,6 +170,42 @@ function computeExtras(extras, ctx) {
   return { total, bd };
 }
 
+const ACCOUNT_SIZES = [
+  { size: 2500,   label: "$2.5K" },
+  { size: 5000,   label: "$5K" },
+  { size: 10000,  label: "$10K" },
+  { size: 25000,  label: "$25K" },
+  { size: 50000,  label: "$50K" },
+  { size: 100000, label: "$100K" },
+];
+
+const PROGRAM_FEES = {
+  freedom: { 10000: 150, 25000: 400, 50000: 750, 100000: 1165 },
+  classic: { 10000: 97, 25000: 225, 50000: 410, 100000: 697 },
+  instant: { 2500: 150, 5000: 250, 10000: 400, 25000: 1000, 50000: 2000, 100000: 4000 },
+};
+
+const FEE_SIZE_SCHEDULE = [
+  { fee: 167,  size: 10000 },
+  { fee: 397,  size: 25000 },
+  { fee: 747,  size: 50000 },
+  { fee: 1197, size: 100000 },
+];
+
+function interpolateSize(fee) {
+  const s = FEE_SIZE_SCHEDULE;
+  if (fee <= s[0].fee) return Math.max(1000, Math.round(s[0].size * (fee / s[0].fee)));
+  for (let i = 1; i < s.length; i++) {
+    if (fee <= s[i].fee) {
+      const t = (fee - s[i - 1].fee) / (s[i].fee - s[i - 1].fee);
+      return Math.round(s[i - 1].size + t * (s[i].size - s[i - 1].size));
+    }
+  }
+  const last = s[s.length - 1], prev = s[s.length - 2];
+  const t = (fee - prev.fee) / (last.fee - prev.fee);
+  return Math.round(prev.size + t * (last.size - prev.size));
+}
+
 const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState(String(value));
@@ -219,6 +259,62 @@ const presetBtnStyle = {
   padding: "6px 12px", background: "rgba(255,255,255,0.04)", color: "#94a3b8",
   border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
   fontWeight: 600, fontSize: 10, cursor: "pointer", letterSpacing: "0.02em",
+};
+
+const AccountSizeRow = ({ d, onUpdate, onSizeChange }) => {
+  const [editFee, setEditFee] = useState(false);
+  const [rawFee, setRawFee] = useState(String(d.fee));
+  const [editCount, setEditCount] = useState(false);
+  const [rawCount, setRawCount] = useState(String(d.count));
+
+  const cellInput = {
+    width: 52, padding: "3px 4px", background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa",
+    fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right",
+  };
+
+  return (
+    <tr>
+      <td style={{ padding: "4px" }}>
+        <select
+          value={d.size}
+          onChange={e => onSizeChange(parseInt(e.target.value))}
+          style={{
+            padding: "3px 2px", background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3,
+            color: d.color || "#60a5fa", fontFamily: "'JetBrains Mono'",
+            fontSize: 11, fontWeight: 700, cursor: "pointer", width: 62,
+          }}
+        >
+          {ACCOUNT_SIZES.map(a => (
+            <option key={a.size} value={a.size} style={{ background: "#0f172a" }}>{a.label}</option>
+          ))}
+        </select>
+      </td>
+      <td style={{ padding: "4px", textAlign: "right" }}>
+        <input
+          type="text" inputMode="decimal"
+          value={editFee ? rawFee : fmtNum(d.fee)}
+          onFocus={() => { setEditFee(true); setRawFee(String(d.fee)); }}
+          onBlur={() => { setEditFee(false); onUpdate("fee", parseNum(rawFee)); }}
+          onChange={e => setRawFee(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && e.target.blur()}
+          style={cellInput}
+        />
+      </td>
+      <td style={{ padding: "4px", textAlign: "right" }}>
+        <input
+          type="text" inputMode="numeric"
+          value={editCount ? rawCount : fmtNum(d.count)}
+          onFocus={() => { setEditCount(true); setRawCount(String(d.count)); }}
+          onBlur={() => { setEditCount(false); onUpdate("count", Math.round(parseNum(rawCount))); }}
+          onChange={e => setRawCount(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && e.target.blur()}
+          style={cellInput}
+        />
+      </td>
+    </tr>
+  );
 };
 
 const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
@@ -304,13 +400,54 @@ export default function App() {
   const [fundedPct, setFundedPct] = useState(10);
   const [avgPayoutPct, setAvgPayoutPct] = useState(5); // median per-cycle payout as % of account
 
-  // Account distribution
-  const [dist, setDist] = useState([
-    { size: 10000, fee: 167, count: 1000, label: "$10K", color: "#06b6d4" },
-    { size: 25000, fee: 397, count: 1000, label: "$25K", color: "#3b82f6" },
-    { size: 50000, fee: 747, count: 1000, label: "$50K", color: "#8b5cf6" },
-    { size: 100000, fee: 1197, count: 1000, label: "$100K", color: "#f59e0b" },
+  // Programs — each program type has its own set of account sizes,
+  // plus program-level discount % and reset price (% of fee).
+  const [programs, setPrograms] = useState([
+    {
+      id: "freedom", name: "Freedom Program", color: "#3b82f6",
+      discountPct: 15, resetPct: 80,
+      sizes: [
+        { size: 10000,  fee: 150,  count: 250 },
+        { size: 25000,  fee: 400,  count: 250 },
+        { size: 50000,  fee: 750,  count: 250 },
+        { size: 100000, fee: 1165, count: 250 },
+      ],
+    },
+    {
+      id: "classic", name: "2 Step Classic", color: "#f59e0b",
+      discountPct: 15, resetPct: 80,
+      sizes: [
+        { size: 10000,  fee: 97,   count: 250 },
+        { size: 25000,  fee: 225,  count: 250 },
+        { size: 50000,  fee: 410,  count: 250 },
+        { size: 100000, fee: 697,  count: 250 },
+      ],
+    },
+    {
+      id: "instant", name: "Instant Funding", color: "#10b981",
+      discountPct: 5, resetPct: 90,
+      sizes: [
+        { size: 2500,   fee: 150,  count: 250 },
+        { size: 5000,   fee: 250,  count: 250 },
+        { size: 10000,  fee: 400,  count: 250 },
+        { size: 25000,  fee: 1000, count: 250 },
+        { size: 50000,  fee: 2000, count: 250 },
+        { size: 100000, fee: 4000, count: 250 },
+      ],
+    },
   ]);
+  const [activeProgram, setActiveProgram] = useState("freedom");
+
+  // Calc mode: "perSize" (existing per-tier) or "aov" (average order value)
+  const [calcMode, setCalcMode] = useState("perSize");
+  const [aovAccounts, setAovAccounts] = useState(4000);
+  const [aovFee, setAovFee] = useState(500);
+  const [aovDiscount, setAovDiscount] = useState(15);
+  const [aovResetPct, setAovResetPct] = useState(80);
+
+  // Multi-month projection
+  const [months, setMonths] = useState(1);
+  const [growthRate, setGrowthRate] = useState(0);
 
   // Costs
   const [platformCost, setPlatformCost] = useState(2.75);
@@ -318,17 +455,35 @@ export default function App() {
   const [marketingCost, setMarketingCost] = useState(100000);
   const [affiliateShare, setAffiliateShare] = useState(25);
   const [affiliateComm, setAffiliateComm] = useState(20);
-  const [marketingDiscount, setMarketingDiscount] = useState(15);
-  const [resetDiscount, setResetDiscount] = useState(80);
   const [resetRate, setResetRate] = useState(35);
 
   // Extra user-defined costs / overheads / parameters
   const [extraCosts, setExtraCosts] = useState([]);
 
   const [results, setResults] = useState(null);
+  const [projection, setProjection] = useState(null);
 
-  const updateDist = (idx, field, val) => {
-    setDist(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
+  const updateProgramSize = (progId, sizeIdx, field, val) => {
+    setPrograms(prev => prev.map(p =>
+      p.id !== progId ? p : {
+        ...p,
+        sizes: p.sizes.map((s, i) => i === sizeIdx ? { ...s, [field]: val } : s),
+      }
+    ));
+  };
+  const handleSizeChange = (progId, sizeIdx, newSize) => {
+    const defaultFee = PROGRAM_FEES[progId]?.[newSize] || 0;
+    setPrograms(prev => prev.map(p =>
+      p.id !== progId ? p : {
+        ...p,
+        sizes: p.sizes.map((s, i) => i !== sizeIdx ? s : { ...s, size: newSize, fee: defaultFee }),
+      }
+    ));
+  };
+  const updateProgram = (progId, field, val) => {
+    setPrograms(prev => prev.map(p =>
+      p.id === progId ? { ...p, [field]: val } : p
+    ));
   };
 
   const addExtraCost = (preset) => {
@@ -346,19 +501,53 @@ export default function App() {
     setExtraCosts(prev => prev.filter(c => c.id !== id));
   };
 
-  const totalAccounts = dist.reduce((s, d) => s + d.count, 0);
+  const aovSize = interpolateSize(aovFee);
+  const effectiveSizes = calcMode === "aov"
+    ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, resetPct: aovResetPct, key: "aov", label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
+    : programs.flatMap(p => p.sizes.map((s, i) => ({
+        ...s,
+        discount: p.discountPct,
+        resetPct: p.resetPct,
+        key: `${p.id}_${i}`,
+        label: ACCOUNT_SIZES.find(a => a.size === s.size)?.label || `$${s.size / 1000}K`,
+        color: p.color,
+        program: p.name,
+      })));
+  const totalAccounts = effectiveSizes.reduce((s, d) => s + d.count, 0);
 
   const run = useCallback(() => {
-    setResults(runSim({
-      sizes: dist, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
+    const baseParams = {
+      sizes: effectiveSizes, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
       platformCost, employeeCost, marketingCost,
       affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
-      marketingDiscount: marketingDiscount / 100, resetDiscount: resetDiscount / 100,
       resetRate: resetRate / 100,
       extraCosts,
-    }));
-  }, [passRate, fundedPct, avgPayoutPct, dist, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, marketingDiscount, resetDiscount, resetRate, extraCosts]);
+    };
+
+    if (months <= 1) {
+      setResults(runSim(baseParams));
+      setProjection(null);
+    } else {
+      const monthly = [];
+      let cumNet = 0, cumRev = 0, cumCost = 0;
+      for (let m = 0; m < months; m++) {
+        const growth = Math.pow(1 + growthRate / 100, m);
+        const params = {
+          ...baseParams,
+          sizes: baseParams.sizes.map(sz => ({ ...sz, count: Math.round(sz.count * growth) })),
+        };
+        const r = runSim(params);
+        cumNet += r.net;
+        cumRev += r.revenue;
+        cumCost += r.costs;
+        monthly.push({ month: m + 1, ...r, cumNet, cumRev, cumCost });
+      }
+      setResults(monthly[0]);
+      setProjection(monthly);
+    }
+  }, [passRate, fundedPct, avgPayoutPct, effectiveSizes, platformCost, employeeCost, marketingCost,
+      affiliateShare, affiliateComm, resetRate, extraCosts, months, growthRate,
+      calcMode, aovAccounts, aovFee, aovDiscount, aovResetPct]);
 
   useEffect(() => { run(); }, []);
 
@@ -381,7 +570,7 @@ export default function App() {
 
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f8fafc", margin: "0 0 4px" }}>
-          CXM Freedom — Full P&L Simulator
+          CXM — Full P&L Simulator
         </h1>
         <p style={{ fontSize: 11, color: "#475569", margin: "0 0 16px" }}>
           All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. Deterministic expected-value model.
@@ -392,51 +581,109 @@ export default function App() {
 
           {/* Account Distribution */}
           <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-            <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Account Distribution</h3>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-              <thead>
-                <tr>
-                  {["Size", "Fee", "Qty"].map(h => (
-                    <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dist.map((d, i) => {
-                  const [editFee, setEditFee] = useState(false);
-                  const [rawFee, setRawFee] = useState(String(d.fee));
-                  const [editCount, setEditCount] = useState(false);
-                  const [rawCount, setRawCount] = useState(String(d.count));
-                  return (
-                  <tr key={d.size}>
-                    <td style={{ padding: "4px", fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>{d.label}</td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>
-                      <input type="text" inputMode="decimal"
-                        value={editFee ? rawFee : fmtNum(d.fee)}
-                        onFocus={() => { setEditFee(true); setRawFee(String(d.fee)); }}
-                        onBlur={() => { setEditFee(false); updateDist(i, "fee", parseNum(rawFee)); }}
-                        onChange={e => setRawFee(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && e.target.blur()}
-                        style={{ width: 60, padding: "3px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }} />
-                    </td>
-                    <td style={{ padding: "4px", textAlign: "right" }}>
-                      <input type="text" inputMode="numeric"
-                        value={editCount ? rawCount : fmtNum(d.count)}
-                        onFocus={() => { setEditCount(true); setRawCount(String(d.count)); }}
-                        onBlur={() => { setEditCount(false); updateDist(i, "count", Math.round(parseNum(rawCount))); }}
-                        onChange={e => setRawCount(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && e.target.blur()}
-                        style={{ width: 60, padding: "3px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }} />
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
-              <span>Total:</span>
-              <span style={{ fontWeight: 700 }}>{totalAccounts.toLocaleString()} accounts</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>Accounts</h3>
+              <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)" }}>
+                {[["perSize", "Per Size"], ["aov", "AOV"]].map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setCalcMode(k)}
+                    style={{
+                      padding: "4px 10px", fontSize: 9, fontWeight: 700, cursor: "pointer",
+                      border: "none", letterSpacing: "0.04em",
+                      background: calcMode === k ? "#3b82f6" : "rgba(255,255,255,0.04)",
+                      color: calcMode === k ? "#fff" : "#64748b",
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
             </div>
+
+            {calcMode === "perSize" ? (
+              <>
+                {/* Program tabs */}
+                <div style={{ display: "flex", gap: 0, marginBottom: 8, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {programs.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setActiveProgram(p.id)}
+                      style={{
+                        flex: 1, padding: "5px 4px", fontSize: 8, fontWeight: 700,
+                        cursor: "pointer", border: "none", letterSpacing: "0.03em",
+                        background: activeProgram === p.id ? p.color : "rgba(255,255,255,0.04)",
+                        color: activeProgram === p.id ? "#fff" : "#64748b",
+                      }}
+                    >{p.name}</button>
+                  ))}
+                </div>
+
+                {programs.filter(p => p.id === activeProgram).map(p => (
+                  <div key={p.id}>
+                    <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>Discount</span>
+                        <input
+                          type="text" inputMode="decimal"
+                          value={p.discountPct}
+                          onChange={e => updateProgram(p.id, "discountPct", parseNum(e.target.value))}
+                          style={{ width: 30, padding: "2px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }}
+                        />
+                        <span style={{ fontSize: 9, color: "#475569" }}>%</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>Reset</span>
+                        <input
+                          type="text" inputMode="decimal"
+                          value={p.resetPct}
+                          onChange={e => updateProgram(p.id, "resetPct", parseNum(e.target.value))}
+                          style={{ width: 30, padding: "2px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }}
+                        />
+                        <span style={{ fontSize: 9, color: "#475569" }}>% of fee</span>
+                      </div>
+                    </div>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                      <thead>
+                        <tr>
+                          {["Size", "Fee", "Qty"].map(h => (
+                            <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.sizes.map((s, i) => (
+                          <AccountSizeRow
+                            key={`${p.id}_${i}`}
+                            d={{ ...s, color: p.color, label: ACCOUNT_SIZES.find(a => a.size === s.size)?.label }}
+                            onUpdate={(field, val) => updateProgramSize(p.id, i, field, val)}
+                            onSizeChange={(newSize) => handleSizeChange(p.id, i, newSize)}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{ marginTop: 6, fontSize: 10, color: "#64748b", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
+                      <span>{p.name}:</span>
+                      <span style={{ fontWeight: 600 }}>{p.sizes.reduce((s, sz) => s + sz.count, 0).toLocaleString()} accounts</span>
+                    </div>
+                  </div>
+                ))}
+
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 11, color: "#e2e8f0", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700 }}>Total ({programs.length} programs):</span>
+                  <span style={{ fontWeight: 800 }}>{totalAccounts.toLocaleString()} accounts</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Input label="Total Accounts / Month" value={aovAccounts} onChange={setAovAccounts} width={80} />
+                <Input label="Avg Order Value (Fee)" value={aovFee} onChange={setAovFee} prefix="$" width={80} />
+                <Input label="Marketing Discount" value={aovDiscount} onChange={setAovDiscount} suffix="%" width={50} />
+                <Input label="Reset Price" value={aovResetPct} onChange={setAovResetPct} suffix="% of fee" width={50} />
+                <div style={{ fontSize: 9, color: "#475569", lineHeight: 1.5, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8, marginTop: 2 }}>
+                  Interpolated account size: <span style={{ color: "#10b981", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>${aovSize.toLocaleString()}</span>
+                  <br />Uses a single blended tier. Fee ${aovFee} maps to ~${Math.round(aovSize / 1000)}K account via the tier schedule.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Trading Params */}
@@ -447,10 +694,16 @@ export default function App() {
               <Input label="Funded Payout %" value={fundedPct} onChange={setFundedPct} suffix="%" width={60} />
               <Input label="Avg Payout Size" value={avgPayoutPct} onChange={setAvgPayoutPct} suffix="% of acct" width={60} />
               <Input label="Reset Rate" value={resetRate} onChange={setResetRate} suffix="%" width={60} />
-              <Input label="Reset Price" value={resetDiscount} onChange={setResetDiscount} suffix="% of fee" width={60} />
+            </div>
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 10, paddingTop: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Projection</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <Input label="Months" value={months} onChange={v => setMonths(Math.max(1, Math.round(v)))} width={50} />
+                <Input label="Growth / Month" value={growthRate} onChange={setGrowthRate} suffix="%" width={50} />
+              </div>
             </div>
             <div style={{ fontSize: 9, color: "#475569", marginTop: 6, lineHeight: 1.4 }}>
-              Avg Payout Size: median per-cycle payout as % of account. 1.5% = $150 on $10K, $1,500 on $100K. Capped at 5% per cycle.
+              Avg Payout Size: median per-cycle payout as % of account. Capped at 5% per cycle. Discount &amp; reset price are set per program. Set Months &gt; 1 to project cash flow.
             </div>
           </div>
 
@@ -463,7 +716,9 @@ export default function App() {
               <Input label="Marketing / Month" value={marketingCost} onChange={setMarketingCost} prefix="$" width={80} />
               <Input label="Affiliate Share" value={affiliateShare} onChange={setAffiliateShare} suffix="%" width={50} />
               <Input label="Affiliate Commission" value={affiliateComm} onChange={setAffiliateComm} suffix="%" width={50} />
-              <Input label="Marketing Discount" value={marketingDiscount} onChange={setMarketingDiscount} suffix="%" width={50} />
+            </div>
+            <div style={{ fontSize: 9, color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
+              Discount % and reset price are set per program in the Accounts panel.
             </div>
           </div>
         </div>
@@ -553,46 +808,64 @@ export default function App() {
               color: "#000", border: "none", borderRadius: 6,
               fontWeight: 800, fontSize: 13, cursor: "pointer", width: "100%",
             }}>
-            {`Recalculate — ${totalAccounts.toLocaleString()} Accounts`}
+            {months > 1
+              ? `Recalculate — ${totalAccounts.toLocaleString()} Accounts/mo × ${months} Months`
+              : `Recalculate — ${totalAccounts.toLocaleString()} Accounts`}
           </button>
         </div>
 
         {/* ==================== RESULTS ==================== */}
-        {results && (
+        {results && (() => {
+          const projTotals = projection ? {
+            net: projection.reduce((s, m) => s + m.net, 0),
+            revenue: projection.reduce((s, m) => s + m.revenue, 0),
+            costs: projection.reduce((s, m) => s + m.costs, 0),
+            totalAccounts: projection.reduce((s, m) => s + m.totalAccounts, 0),
+          } : null;
+          const heroNet = projTotals ? projTotals.net : results.net;
+          const heroRev = projTotals ? projTotals.revenue : results.revenue;
+          const heroCosts = projTotals ? projTotals.costs : results.costs;
+          const heroAccounts = projTotals ? projTotals.totalAccounts : totalAccounts;
+          const heroMargin = heroRev > 0 ? heroNet / heroRev * 100 : 0;
+          return (
           <>
             {/* Hero P&L */}
             <div style={{
               padding: 20, marginBottom: 20, borderRadius: 8,
-              background: results.net > 0 ? "rgba(34,197,94,0.05)" : "rgba(239,68,68,0.05)",
-              border: `2px solid ${results.net > 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+              background: heroNet > 0 ? "rgba(34,197,94,0.05)" : "rgba(239,68,68,0.05)",
+              border: `2px solid ${heroNet > 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
             }}>
               <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                Net P&L — {totalAccounts.toLocaleString()} Accounts @ {passRate}% Pass / {fundedPct}% Funded Payout
+                {projection
+                  ? `${months}-Month P&L — ${heroAccounts.toLocaleString()} Total Accounts @ ${passRate}% Pass / ${fundedPct}% Funded Payout`
+                  : `Net P&L — ${totalAccounts.toLocaleString()} Accounts @ ${passRate}% Pass / ${fundedPct}% Funded Payout`
+                }
               </div>
-              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: results.net > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
-                {$(results.net)}
+              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: heroNet > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
+                {$(heroNet)}
               </div>
               <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                {results.margin.toFixed(1)}% margin · Revenue {$(results.revenue)} · Costs {$(results.costs)}
+                {heroMargin.toFixed(1)}% margin · Revenue {$(heroRev)} · Costs {$(heroCosts)}
+                {projection && ` · ${months} months${growthRate > 0 ? ` @ ${growthRate}%/mo growth` : ""}`}
               </div>
             </div>
 
             {/* P&L Waterfall */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
               <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue</h3>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue{projection ? " (Month 1)" : ""}</h3>
                 <Row label="Gross Fee Revenue" value={results.grossFees} bold color="#3b82f6" />
-                <Row label={`Marketing Discounts (${marketingDiscount}%)`} value={-results.discounts} indent color="#ef4444" />
+                <Row label="Marketing Discounts (per program)" value={-results.discounts} indent color="#ef4444" />
                 <Row label={`Affiliate Commissions (${affiliateComm}%)`} value={-results.affComm} indent color="#ef4444" />
                 <Row label="= Net Fee Revenue" value={results.netFees} bold bg="rgba(255,255,255,0.03)" />
                 <div style={{ height: 6 }} />
-                <Row label={`Reset Revenue (${Math.round(results.resets)} resets @ ${resetDiscount}% of fee)`} value={results.resetRev} color="#6366f1" />
+                <Row label={`Reset Revenue (${Math.round(results.resets)} resets, per-program pricing)`} value={results.resetRev} color="#6366f1" />
                 <div style={{ height: 6 }} />
                 <Row label="TOTAL REVENUE" value={results.revenue} bold color="#22c55e" bg="rgba(34,197,94,0.05)" />
               </div>
 
               <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs</h3>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs{projection ? " (Month 1)" : ""}</h3>
                 <Row label={`Trader Payouts (${Math.round(results.payoutTraders)} traders)`} value={results.payouts} color="#ef4444" />
                 <div style={{ height: 6 }} />
                 <Row label={`Platform ($${platformCost} × ${totalAccounts.toLocaleString()})`} value={results.platform} color="#f59e0b" />
@@ -622,7 +895,7 @@ export default function App() {
             {/* Per-size breakdown */}
             <div style={{ marginBottom: 24 }}>
               <h3 style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                By Account Size (variable costs only — fixed costs excluded)
+                {calcMode === "aov" ? "Blended Tier" : "By Account Size"} (variable costs only — fixed excluded){projection ? " — Month 1" : ""}
               </h3>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
@@ -634,17 +907,23 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dist.map(d => {
-                      const s = results.sizeAvg[d.size];
+                    {effectiveSizes.map(d => {
+                      const s = results.sizeAvg[d.key || d.size];
                       if (!s) return null;
                       const varPnL = s.nf + s.resetRev - s.payouts - (d.count * platformCost);
                       return (
-                        <tr key={d.size} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td style={{ padding: "7px 5px", fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>{d.label}</td>
+                        <tr key={d.key || d.size} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                          <td style={{ padding: "7px 5px" }}>
+                            {d.program && <div style={{ fontSize: 8, color: "#64748b", lineHeight: 1.2 }}>{d.program}</div>}
+                            <div style={{ fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>{d.label}</div>
+                          </td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{d.count.toLocaleString()}</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>${d.fee}</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{$(s.gf)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>({$(s.disc)})</td>
+                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>
+                            ({$(s.disc)})
+                            <span style={{ fontSize: 9, color: "#64748b", marginLeft: 4 }}>{d.discount ?? 0}%</span>
+                          </td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>({$(s.ac)})</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#3b82f6" }}>{$(s.nf)}</td>
                           <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#6366f1" }}>{$(s.resetRev)}</td>
@@ -677,8 +956,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* Key stats */}
+            {/* Key stats (Month 1 / single-month) */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 20 }}>
+              {projection && (
+                <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "#64748b", fontWeight: 600, marginBottom: -4, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  Month 1 Unit Economics
+                </div>
+              )}
               {[
                 { l: "Passers", v: `${Math.round(results.passers)}`, c: "#94a3b8", sub: `${passRate}% of ${totalAccounts.toLocaleString()}` },
                 { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#94a3b8", sub: `${fundedPct}% of funded` },
@@ -695,8 +979,62 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            {/* Monthly projection table */}
+            {projection && projection.length > 1 && (
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  Monthly Cash Flow — {months} Months{growthRate > 0 ? ` @ ${growthRate}%/mo Growth` : ""}
+                </h3>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
+                        {["Month", "Accounts", "Revenue", "Costs", "Net P&L", "Cumulative"].map(h => (
+                          <th key={h} style={{
+                            padding: "6px 8px",
+                            textAlign: h === "Month" ? "center" : "right",
+                            fontSize: 8, fontWeight: 700, color: "#64748b",
+                            letterSpacing: "0.05em", textTransform: "uppercase",
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projection.map(m => (
+                        <tr key={m.month} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                          <td style={{ padding: "7px 8px", textAlign: "center", fontFamily: "'JetBrains Mono'", color: "#94a3b8", fontWeight: 600 }}>{m.month}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{m.totalAccounts.toLocaleString()}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#22c55e" }}>{$(m.revenue)}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>{$(m.costs)}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: m.net > 0 ? "#22c55e" : "#ef4444" }}>{$(m.net)}</td>
+                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: m.cumNet > 0 ? "#22c55e" : "#ef4444" }}>{$(m.cumNet)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ borderTop: "2px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.03)" }}>
+                        <td style={{ padding: "8px 8px", textAlign: "center", fontWeight: 800 }}>Total</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{projTotals.totalAccounts.toLocaleString()}</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#22c55e" }}>{$(projTotals.revenue)}</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>{$(projTotals.costs)}</td>
+                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, fontSize: 12, color: projTotals.net > 0 ? "#22c55e" : "#ef4444" }}>{$(projTotals.net)}</td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {(() => {
+                  const beMonth = projection.findIndex(m => m.cumNet > 0);
+                  return beMonth > 0 ? (
+                    <div style={{ fontSize: 10, color: "#22c55e", marginTop: 6, fontWeight: 600 }}>
+                      Break-even at month {projection[beMonth].month} (cumulative turns positive at {$(projection[beMonth].cumNet)})
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
           </>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

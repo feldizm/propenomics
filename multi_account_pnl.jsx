@@ -42,7 +42,7 @@ function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
 
 function runSim(params) {
   const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
-    affiliateShare, affiliateComm, resetDiscount, resetRate,
+    affiliateShare, affiliateComm, resetRate,
     extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
@@ -75,7 +75,8 @@ function runSim(params) {
     // probability affiliateShare of being an affiliate sale (which nets
     // reset fee minus commission).
     const sizeResetCount = fc * resetRate;
-    const effPerReset = sz.fee * resetDiscount * (1 - affiliateShare * affiliateComm);
+    const sizeResetPct = (sz.resetPct ?? 80) / 100;
+    const effPerReset = sz.fee * sizeResetPct * (1 - affiliateShare * affiliateComm);
     const sizeResetRev = sizeResetCount * effPerReset;
     resetRev += sizeResetRev;
     resetCount += sizeResetCount;
@@ -170,12 +171,19 @@ function computeExtras(extras, ctx) {
 }
 
 const ACCOUNT_SIZES = [
-  { size: 5000,   label: "$5K",   defaultFee: 97 },
-  { size: 10000,  label: "$10K",  defaultFee: 167 },
-  { size: 25000,  label: "$25K",  defaultFee: 397 },
-  { size: 50000,  label: "$50K",  defaultFee: 747 },
-  { size: 100000, label: "$100K", defaultFee: 1197 },
+  { size: 2500,   label: "$2.5K" },
+  { size: 5000,   label: "$5K" },
+  { size: 10000,  label: "$10K" },
+  { size: 25000,  label: "$25K" },
+  { size: 50000,  label: "$50K" },
+  { size: 100000, label: "$100K" },
 ];
+
+const PROGRAM_FEES = {
+  freedom: { 10000: 150, 25000: 400, 50000: 750, 100000: 1165 },
+  classic: { 10000: 97, 25000: 225, 50000: 410, 100000: 697 },
+  instant: { 2500: 150, 5000: 250, 10000: 400, 25000: 1000, 50000: 2000, 100000: 4000 },
+};
 
 const FEE_SIZE_SCHEDULE = [
   { fee: 167,  size: 10000 },
@@ -258,8 +266,6 @@ const AccountSizeRow = ({ d, onUpdate, onSizeChange }) => {
   const [rawFee, setRawFee] = useState(String(d.fee));
   const [editCount, setEditCount] = useState(false);
   const [rawCount, setRawCount] = useState(String(d.count));
-  const [editDisc, setEditDisc] = useState(false);
-  const [rawDisc, setRawDisc] = useState(String(d.discount ?? 0));
 
   const cellInput = {
     width: 52, padding: "3px 4px", background: "rgba(255,255,255,0.06)",
@@ -306,21 +312,6 @@ const AccountSizeRow = ({ d, onUpdate, onSizeChange }) => {
           onKeyDown={e => e.key === "Enter" && e.target.blur()}
           style={cellInput}
         />
-      </td>
-      <td style={{ padding: "4px", textAlign: "right" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
-          <input
-            type="text" inputMode="decimal"
-            value={editDisc ? rawDisc : fmtNum(d.discount ?? 0)}
-            onFocus={() => { setEditDisc(true); setRawDisc(String(d.discount ?? 0)); }}
-            onBlur={() => { setEditDisc(false); onUpdate("discount", parseNum(rawDisc)); }}
-            onChange={e => setRawDisc(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && e.target.blur()}
-            style={{ ...cellInput, width: 38 }}
-            title="Marketing discount % for this program"
-          />
-          <span style={{ fontSize: 10, color: "#475569" }}>%</span>
-        </div>
       </td>
     </tr>
   );
@@ -409,34 +400,39 @@ export default function App() {
   const [fundedPct, setFundedPct] = useState(10);
   const [avgPayoutPct, setAvgPayoutPct] = useState(5); // median per-cycle payout as % of account
 
-  // Programs — each program type has its own set of account sizes.
+  // Programs — each program type has its own set of account sizes,
+  // plus program-level discount % and reset price (% of fee).
   const [programs, setPrograms] = useState([
     {
       id: "freedom", name: "Freedom Program", color: "#3b82f6",
+      discountPct: 15, resetPct: 80,
       sizes: [
-        { size: 10000,  fee: 167,  count: 250, discount: 15 },
-        { size: 25000,  fee: 397,  count: 250, discount: 15 },
-        { size: 50000,  fee: 747,  count: 250, discount: 15 },
-        { size: 100000, fee: 1197, count: 250, discount: 15 },
+        { size: 10000,  fee: 150,  count: 250 },
+        { size: 25000,  fee: 400,  count: 250 },
+        { size: 50000,  fee: 750,  count: 250 },
+        { size: 100000, fee: 1165, count: 250 },
       ],
     },
     {
       id: "classic", name: "2 Step Classic", color: "#f59e0b",
+      discountPct: 15, resetPct: 80,
       sizes: [
-        { size: 10000,  fee: 167,  count: 250, discount: 15 },
-        { size: 25000,  fee: 397,  count: 250, discount: 15 },
-        { size: 50000,  fee: 747,  count: 250, discount: 15 },
-        { size: 100000, fee: 1197, count: 250, discount: 15 },
+        { size: 10000,  fee: 97,   count: 250 },
+        { size: 25000,  fee: 225,  count: 250 },
+        { size: 50000,  fee: 410,  count: 250 },
+        { size: 100000, fee: 697,  count: 250 },
       ],
     },
     {
       id: "instant", name: "Instant Funding", color: "#10b981",
+      discountPct: 5, resetPct: 90,
       sizes: [
-        { size: 5000,   fee: 97,   count: 250, discount: 15 },
-        { size: 10000,  fee: 167,  count: 250, discount: 15 },
-        { size: 25000,  fee: 397,  count: 250, discount: 15 },
-        { size: 50000,  fee: 747,  count: 250, discount: 15 },
-        { size: 100000, fee: 1197, count: 250, discount: 15 },
+        { size: 2500,   fee: 150,  count: 250 },
+        { size: 5000,   fee: 250,  count: 250 },
+        { size: 10000,  fee: 400,  count: 250 },
+        { size: 25000,  fee: 1000, count: 250 },
+        { size: 50000,  fee: 2000, count: 250 },
+        { size: 100000, fee: 4000, count: 250 },
       ],
     },
   ]);
@@ -447,6 +443,7 @@ export default function App() {
   const [aovAccounts, setAovAccounts] = useState(4000);
   const [aovFee, setAovFee] = useState(500);
   const [aovDiscount, setAovDiscount] = useState(15);
+  const [aovResetPct, setAovResetPct] = useState(80);
 
   // Multi-month projection
   const [months, setMonths] = useState(1);
@@ -458,7 +455,6 @@ export default function App() {
   const [marketingCost, setMarketingCost] = useState(100000);
   const [affiliateShare, setAffiliateShare] = useState(25);
   const [affiliateComm, setAffiliateComm] = useState(20);
-  const [resetDiscount, setResetDiscount] = useState(80);
   const [resetRate, setResetRate] = useState(35);
 
   // Extra user-defined costs / overheads / parameters
@@ -476,12 +472,17 @@ export default function App() {
     ));
   };
   const handleSizeChange = (progId, sizeIdx, newSize) => {
-    const defaultFee = ACCOUNT_SIZES.find(a => a.size === newSize)?.defaultFee || 0;
+    const defaultFee = PROGRAM_FEES[progId]?.[newSize] || 0;
     setPrograms(prev => prev.map(p =>
       p.id !== progId ? p : {
         ...p,
         sizes: p.sizes.map((s, i) => i !== sizeIdx ? s : { ...s, size: newSize, fee: defaultFee }),
       }
+    ));
+  };
+  const updateProgram = (progId, field, val) => {
+    setPrograms(prev => prev.map(p =>
+      p.id === progId ? { ...p, [field]: val } : p
     ));
   };
 
@@ -502,9 +503,11 @@ export default function App() {
 
   const aovSize = interpolateSize(aovFee);
   const effectiveSizes = calcMode === "aov"
-    ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, key: "aov", label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
+    ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, resetPct: aovResetPct, key: "aov", label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
     : programs.flatMap(p => p.sizes.map((s, i) => ({
         ...s,
+        discount: p.discountPct,
+        resetPct: p.resetPct,
         key: `${p.id}_${i}`,
         label: ACCOUNT_SIZES.find(a => a.size === s.size)?.label || `$${s.size / 1000}K`,
         color: p.color,
@@ -517,7 +520,6 @@ export default function App() {
       sizes: effectiveSizes, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
       platformCost, employeeCost, marketingCost,
       affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
-      resetDiscount: resetDiscount / 100,
       resetRate: resetRate / 100,
       extraCosts,
     };
@@ -544,8 +546,8 @@ export default function App() {
       setProjection(monthly);
     }
   }, [passRate, fundedPct, avgPayoutPct, effectiveSizes, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, resetDiscount, resetRate, extraCosts, months, growthRate,
-      calcMode, aovAccounts, aovFee, aovDiscount]);
+      affiliateShare, affiliateComm, resetRate, extraCosts, months, growthRate,
+      calcMode, aovAccounts, aovFee, aovDiscount, aovResetPct]);
 
   useEffect(() => { run(); }, []);
 
@@ -617,10 +619,32 @@ export default function App() {
 
                 {programs.filter(p => p.id === activeProgram).map(p => (
                   <div key={p.id}>
+                    <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>Discount</span>
+                        <input
+                          type="text" inputMode="decimal"
+                          value={p.discountPct}
+                          onChange={e => updateProgram(p.id, "discountPct", parseNum(e.target.value))}
+                          style={{ width: 30, padding: "2px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }}
+                        />
+                        <span style={{ fontSize: 9, color: "#475569" }}>%</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>Reset</span>
+                        <input
+                          type="text" inputMode="decimal"
+                          value={p.resetPct}
+                          onChange={e => updateProgram(p.id, "resetPct", parseNum(e.target.value))}
+                          style={{ width: 30, padding: "2px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }}
+                        />
+                        <span style={{ fontSize: 9, color: "#475569" }}>% of fee</span>
+                      </div>
+                    </div>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                       <thead>
                         <tr>
-                          {["Size", "Fee", "Qty", "Disc"].map(h => (
+                          {["Size", "Fee", "Qty"].map(h => (
                             <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
                           ))}
                         </tr>
@@ -653,6 +677,7 @@ export default function App() {
                 <Input label="Total Accounts / Month" value={aovAccounts} onChange={setAovAccounts} width={80} />
                 <Input label="Avg Order Value (Fee)" value={aovFee} onChange={setAovFee} prefix="$" width={80} />
                 <Input label="Marketing Discount" value={aovDiscount} onChange={setAovDiscount} suffix="%" width={50} />
+                <Input label="Reset Price" value={aovResetPct} onChange={setAovResetPct} suffix="% of fee" width={50} />
                 <div style={{ fontSize: 9, color: "#475569", lineHeight: 1.5, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8, marginTop: 2 }}>
                   Interpolated account size: <span style={{ color: "#10b981", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>${aovSize.toLocaleString()}</span>
                   <br />Uses a single blended tier. Fee ${aovFee} maps to ~${Math.round(aovSize / 1000)}K account via the tier schedule.
@@ -669,7 +694,6 @@ export default function App() {
               <Input label="Funded Payout %" value={fundedPct} onChange={setFundedPct} suffix="%" width={60} />
               <Input label="Avg Payout Size" value={avgPayoutPct} onChange={setAvgPayoutPct} suffix="% of acct" width={60} />
               <Input label="Reset Rate" value={resetRate} onChange={setResetRate} suffix="%" width={60} />
-              <Input label="Reset Price" value={resetDiscount} onChange={setResetDiscount} suffix="% of fee" width={60} />
             </div>
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 10, paddingTop: 10 }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Projection</div>
@@ -679,7 +703,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ fontSize: 9, color: "#475569", marginTop: 6, lineHeight: 1.4 }}>
-              Avg Payout Size: median per-cycle payout as % of account. Capped at 5% per cycle. Set Months &gt; 1 to project cash flow.
+              Avg Payout Size: median per-cycle payout as % of account. Capped at 5% per cycle. Discount &amp; reset price are set per program. Set Months &gt; 1 to project cash flow.
             </div>
           </div>
 
@@ -694,7 +718,7 @@ export default function App() {
               <Input label="Affiliate Commission" value={affiliateComm} onChange={setAffiliateComm} suffix="%" width={50} />
             </div>
             <div style={{ fontSize: 9, color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
-              Per-program marketing discount is now set in the Account Distribution table (Disc column).
+              Discount % and reset price are set per program in the Accounts panel.
             </div>
           </div>
         </div>
@@ -835,7 +859,7 @@ export default function App() {
                 <Row label={`Affiliate Commissions (${affiliateComm}%)`} value={-results.affComm} indent color="#ef4444" />
                 <Row label="= Net Fee Revenue" value={results.netFees} bold bg="rgba(255,255,255,0.03)" />
                 <div style={{ height: 6 }} />
-                <Row label={`Reset Revenue (${Math.round(results.resets)} resets @ ${resetDiscount}% of fee)`} value={results.resetRev} color="#6366f1" />
+                <Row label={`Reset Revenue (${Math.round(results.resets)} resets, per-program pricing)`} value={results.resetRev} color="#6366f1" />
                 <div style={{ height: 6 }} />
                 <Row label="TOTAL REVENUE" value={results.revenue} bold color="#22c55e" bg="rgba(34,197,94,0.05)" />
               </div>

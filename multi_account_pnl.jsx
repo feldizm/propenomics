@@ -41,8 +41,8 @@ function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
 }
 
 function runSim(params) {
-  const { sizes, passRate, fundedPct, avgPayoutPct, platformCost, employeeCost, marketingCost,
-    affiliateShare, affiliateComm, resetRate,
+  const { sizes, platformCost, employeeCost, marketingCost,
+    affiliateShare, affiliateComm,
     extraCosts = [] } = params;
 
   const totalAccounts = sizes.reduce((s, sz) => s + sz.count, 0);
@@ -55,13 +55,15 @@ function runSim(params) {
     const n = sz.count;
     if (n === 0) continue;
 
-    const pc = Math.round(n * passRate / 100);
+    const szPassRate = sz.passRate ?? 10;
+    const szFundedPct = sz.fundedPct ?? 10;
+    const szAvgPayoutPct = (sz.avgPayoutPct ?? 5) / 100;
+    const szResetRate = (sz.resetRate ?? 35) / 100;
+
+    const pc = Math.round(n * szPassRate / 100);
     const fc = n - pc;
     passers += pc;
 
-    // Fees — deterministic. Marketing discount applies to non-affiliate
-    // sales only; affiliate sales pay full price then rebate a commission.
-    // Each program (size) has its own discount percentage.
     const sizeDiscount = (sz.discount ?? 0) / 100;
     const affSales = Math.round(n * affiliateShare);
     const mktSales = n - affSales;
@@ -71,22 +73,15 @@ function runSim(params) {
     const nf = gf - disc - ac;
     grossFees += gf; discounts += disc; affComm += ac;
 
-    // Expected resets: fc Bernoulli(resetRate) trials, each reset has
-    // probability affiliateShare of being an affiliate sale (which nets
-    // reset fee minus commission).
-    const sizeResetCount = fc * resetRate;
+    const sizeResetCount = fc * szResetRate;
     const sizeResetPct = (sz.resetPct ?? 80) / 100;
     const effPerReset = sz.fee * sizeResetPct * (1 - affiliateShare * affiliateComm);
     const sizeResetRev = sizeResetCount * effPerReset;
     resetRev += sizeResetRev;
     resetCount += sizeResetCount;
 
-    // Expected payouts: of the `pc` passers, a fraction `fundedPct` ever
-    // collect; each collector earns E[clipped lognormal] · E[cycles].
-    // fundedPct is supplied as a percentage (e.g. 10 for 10%), matching
-    // passRate's treatment above.
-    const sizePT = pc * fundedPct / 100;
-    const sizePaid = sizePT * expectedPayoutPerTrader(sz.size, avgPayoutPct);
+    const sizePT = pc * szFundedPct / 100;
+    const sizePaid = sizePT * expectedPayoutPerTrader(sz.size, szAvgPayoutPct);
     payouts += sizePaid;
     payoutTraders += sizePT;
 
@@ -396,16 +391,13 @@ const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
 };
 
 export default function App() {
-  const [passRate, setPassRate] = useState(10);
-  const [fundedPct, setFundedPct] = useState(10);
-  const [avgPayoutPct, setAvgPayoutPct] = useState(5); // median per-cycle payout as % of account
-
   // Programs — each program type has its own set of account sizes,
-  // plus program-level discount % and reset price (% of fee).
+  // discount %, reset price, and trader performance metrics.
   const [programs, setPrograms] = useState([
     {
       id: "freedom", name: "Freedom Program", color: "#3b82f6",
       discountPct: 15, resetPct: 80,
+      passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
         { size: 10000,  fee: 150,  count: 250 },
         { size: 25000,  fee: 400,  count: 250 },
@@ -416,6 +408,7 @@ export default function App() {
     {
       id: "classic", name: "2 Step Classic", color: "#f59e0b",
       discountPct: 15, resetPct: 80,
+      passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
         { size: 10000,  fee: 97,   count: 250 },
         { size: 25000,  fee: 225,  count: 250 },
@@ -426,6 +419,7 @@ export default function App() {
     {
       id: "instant", name: "Instant Funding", color: "#10b981",
       discountPct: 5, resetPct: 90,
+      passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
         { size: 2500,   fee: 150,  count: 250 },
         { size: 5000,   fee: 250,  count: 250 },
@@ -444,6 +438,10 @@ export default function App() {
   const [aovFee, setAovFee] = useState(500);
   const [aovDiscount, setAovDiscount] = useState(15);
   const [aovResetPct, setAovResetPct] = useState(80);
+  const [aovPassRate, setAovPassRate] = useState(10);
+  const [aovFundedPct, setAovFundedPct] = useState(10);
+  const [aovAvgPayoutPct, setAovAvgPayoutPct] = useState(5);
+  const [aovResetRate, setAovResetRate] = useState(35);
 
   // Multi-month projection
   const [months, setMonths] = useState(1);
@@ -455,7 +453,6 @@ export default function App() {
   const [marketingCost, setMarketingCost] = useState(100000);
   const [affiliateShare, setAffiliateShare] = useState(25);
   const [affiliateComm, setAffiliateComm] = useState(20);
-  const [resetRate, setResetRate] = useState(35);
 
   // Extra user-defined costs / overheads / parameters
   const [extraCosts, setExtraCosts] = useState([]);
@@ -503,11 +500,17 @@ export default function App() {
 
   const aovSize = interpolateSize(aovFee);
   const effectiveSizes = calcMode === "aov"
-    ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, resetPct: aovResetPct, key: "aov", label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
+    ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, resetPct: aovResetPct,
+         passRate: aovPassRate, fundedPct: aovFundedPct, avgPayoutPct: aovAvgPayoutPct, resetRate: aovResetRate,
+         key: "aov", label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
     : programs.flatMap(p => p.sizes.map((s, i) => ({
         ...s,
         discount: p.discountPct,
         resetPct: p.resetPct,
+        passRate: p.passRate,
+        fundedPct: p.fundedPct,
+        avgPayoutPct: p.avgPayoutPct,
+        resetRate: p.resetRate,
         key: `${p.id}_${i}`,
         label: ACCOUNT_SIZES.find(a => a.size === s.size)?.label || `$${s.size / 1000}K`,
         color: p.color,
@@ -517,10 +520,9 @@ export default function App() {
 
   const run = useCallback(() => {
     const baseParams = {
-      sizes: effectiveSizes, passRate, fundedPct, avgPayoutPct: avgPayoutPct / 100,
+      sizes: effectiveSizes,
       platformCost, employeeCost, marketingCost,
       affiliateShare: affiliateShare / 100, affiliateComm: affiliateComm / 100,
-      resetRate: resetRate / 100,
       extraCosts,
     };
 
@@ -545,9 +547,8 @@ export default function App() {
       setResults(monthly[0]);
       setProjection(monthly);
     }
-  }, [passRate, fundedPct, avgPayoutPct, effectiveSizes, platformCost, employeeCost, marketingCost,
-      affiliateShare, affiliateComm, resetRate, extraCosts, months, growthRate,
-      calcMode, aovAccounts, aovFee, aovDiscount, aovResetPct]);
+  }, [effectiveSizes, platformCost, employeeCost, marketingCost,
+      affiliateShare, affiliateComm, extraCosts, months, growthRate]);
 
   useEffect(() => { run(); }, []);
 
@@ -686,15 +687,44 @@ export default function App() {
             )}
           </div>
 
-          {/* Trading Params */}
+          {/* Trader Performance Metrics */}
           <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-            <h3 style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Trading Parameters</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Input label="Pass Rate" value={passRate} onChange={setPassRate} suffix="%" width={60} />
-              <Input label="Funded Payout %" value={fundedPct} onChange={setFundedPct} suffix="%" width={60} />
-              <Input label="Avg Payout Size" value={avgPayoutPct} onChange={setAvgPayoutPct} suffix="% of acct" width={60} />
-              <Input label="Reset Rate" value={resetRate} onChange={setResetRate} suffix="%" width={60} />
-            </div>
+            <h3 style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Trader Performance Metrics</h3>
+
+            {calcMode === "perSize" ? (
+              <>
+                <div style={{ display: "flex", gap: 0, marginBottom: 8, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {programs.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setActiveProgram(p.id)}
+                      style={{
+                        flex: 1, padding: "5px 4px", fontSize: 8, fontWeight: 700,
+                        cursor: "pointer", border: "none", letterSpacing: "0.03em",
+                        background: activeProgram === p.id ? p.color : "rgba(255,255,255,0.04)",
+                        color: activeProgram === p.id ? "#fff" : "#64748b",
+                      }}
+                    >{p.name}</button>
+                  ))}
+                </div>
+                {programs.filter(p => p.id === activeProgram).map(p => (
+                  <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <Input label="Pass Rate" value={p.passRate} onChange={v => updateProgram(p.id, "passRate", v)} suffix="%" width={60} />
+                    <Input label="Funded Payout %" value={p.fundedPct} onChange={v => updateProgram(p.id, "fundedPct", v)} suffix="%" width={60} />
+                    <Input label="Avg Payout Size" value={p.avgPayoutPct} onChange={v => updateProgram(p.id, "avgPayoutPct", v)} suffix="% of acct" width={60} />
+                    <Input label="Reset Rate" value={p.resetRate} onChange={v => updateProgram(p.id, "resetRate", v)} suffix="%" width={60} />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <Input label="Pass Rate" value={aovPassRate} onChange={setAovPassRate} suffix="%" width={60} />
+                <Input label="Funded Payout %" value={aovFundedPct} onChange={setAovFundedPct} suffix="%" width={60} />
+                <Input label="Avg Payout Size" value={aovAvgPayoutPct} onChange={setAovAvgPayoutPct} suffix="% of acct" width={60} />
+                <Input label="Reset Rate" value={aovResetRate} onChange={setAovResetRate} suffix="%" width={60} />
+              </div>
+            )}
+
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 10, paddingTop: 10 }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Projection</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -703,7 +733,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ fontSize: 9, color: "#475569", marginTop: 6, lineHeight: 1.4 }}>
-              Avg Payout Size: median per-cycle payout as % of account. Capped at 5% per cycle. Discount &amp; reset price are set per program. Set Months &gt; 1 to project cash flow.
+              Each program has its own performance metrics. Avg Payout capped at 5% per cycle. Set Months &gt; 1 to project.
             </div>
           </div>
 
@@ -718,7 +748,7 @@ export default function App() {
               <Input label="Affiliate Commission" value={affiliateComm} onChange={setAffiliateComm} suffix="%" width={50} />
             </div>
             <div style={{ fontSize: 9, color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
-              Discount % and reset price are set per program in the Accounts panel.
+              Discount, reset price, and trader metrics are set per program.
             </div>
           </div>
         </div>
@@ -837,8 +867,8 @@ export default function App() {
             }}>
               <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                 {projection
-                  ? `${months}-Month P&L — ${heroAccounts.toLocaleString()} Total Accounts @ ${passRate}% Pass / ${fundedPct}% Funded Payout`
-                  : `Net P&L — ${totalAccounts.toLocaleString()} Accounts @ ${passRate}% Pass / ${fundedPct}% Funded Payout`
+                  ? `${months}-Month P&L — ${heroAccounts.toLocaleString()} Total Accounts · ${programs.length} Programs`
+                  : `Net P&L — ${totalAccounts.toLocaleString()} Accounts · ${calcMode === "perSize" ? `${programs.length} Programs` : "AOV Mode"}`
                 }
               </div>
               <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: heroNet > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
@@ -964,9 +994,9 @@ export default function App() {
                 </div>
               )}
               {[
-                { l: "Passers", v: `${Math.round(results.passers)}`, c: "#94a3b8", sub: `${passRate}% of ${totalAccounts.toLocaleString()}` },
-                { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#94a3b8", sub: `${fundedPct}% of funded` },
-                { l: "Resets Sold", v: `${Math.round(results.resets)}`, c: "#94a3b8", sub: `${resetRate}% of failed` },
+                { l: "Passers", v: `${Math.round(results.passers)}`, c: "#94a3b8", sub: `Per-program pass rates` },
+                { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#94a3b8", sub: `Per-program funded %` },
+                { l: "Resets Sold", v: `${Math.round(results.resets)}`, c: "#94a3b8", sub: `Per-program reset rates` },
                 { l: "Avg Payout", v: results.payoutTraders > 0 ? $(results.payouts / results.payoutTraders) : "—", c: "#94a3b8", sub: "Per funded trader" },
                 { l: "Revenue / Account", v: $(results.revenue / totalAccounts), c: "#94a3b8" },
                 { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },

@@ -1,45 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 
-const PAYOUT_CAP_PCT = 0.05;
-const PAYOUT_FLOOR_PCT = 0.001;
-const PAYOUT_LOG_SIGMA = 0.6;
-// genPayout used cycle probs: P(1)=0.55, P(2)=0.30, P(3)=0.15
-const E_CYCLES = 0.55 * 1 + 0.30 * 2 + 0.15 * 3; // 1.60
-
-// Standard normal CDF — Abramowitz & Stegun 7.1.26 (~1.5e-7 accuracy).
-function normCdf(x) {
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  const ax = Math.abs(x) / Math.SQRT2;
-  const t = 1 / (1 + p * ax);
-  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-ax * ax);
-  return 0.5 * (1 + sign * y);
-}
-
-// Closed-form E[clip(X, lo, hi)] for X ~ LogNormal(mu, sigma²).
-// Derivation: split the expectation into lo·P(X<lo) + ∫[lo,hi] x·f(x)dx + hi·P(X>hi).
-// The middle integral is exp(mu + σ²/2) · (Φ((ln(hi)−μ−σ²)/σ) − Φ((ln(lo)−μ−σ²)/σ)).
-function expectedClippedLognormal(mu, sigma, lo, hi) {
-  const zLo = (Math.log(lo) - mu) / sigma;
-  const zHi = (Math.log(hi) - mu) / sigma;
-  const zLoShift = zLo - sigma;
-  const zHiShift = zHi - sigma;
-  const pBelow = normCdf(zLo);
-  const pAbove = 1 - normCdf(zHi);
-  const meanUncapped = Math.exp(mu + 0.5 * sigma * sigma);
-  const meanInRange = meanUncapped * (normCdf(zHiShift) - normCdf(zLoShift));
-  return lo * pBelow + meanInRange + hi * pAbove;
-}
-
-function expectedPayoutPerTrader(accountSize, medianPayoutPct) {
-  const mu = Math.log(accountSize * medianPayoutPct);
-  const lo = accountSize * PAYOUT_FLOOR_PCT;
-  const hi = accountSize * PAYOUT_CAP_PCT;
-  const perCycle = expectedClippedLognormal(mu, PAYOUT_LOG_SIGMA, lo, hi);
-  return E_CYCLES * perCycle;
-}
-
 function runSim(params) {
   const { sizes, platformCost, employeeCost, marketingCost,
     affiliateShare, affiliateComm,
@@ -81,7 +41,7 @@ function runSim(params) {
     resetCount += sizeResetCount;
 
     const sizePT = pc * szFundedPct / 100;
-    const sizePaid = sizePT * expectedPayoutPerTrader(sz.size, szAvgPayoutPct);
+    const sizePaid = sizePT * sz.size * szAvgPayoutPct;
     payouts += sizePaid;
     payoutTraders += sizePT;
 

@@ -33,7 +33,7 @@ function runSim(params) {
     const nf = gf - disc - ac;
     grossFees += gf; discounts += disc; affComm += ac;
 
-    const sizeResetCount = fc * szResetRate;
+    const sizeResetCount = n * szResetRate;
     const sizeResetPct = (sz.resetPct ?? 80) / 100;
     const effPerReset = sz.fee * sizeResetPct * (1 - affiliateShare * affiliateComm);
     const sizeResetRev = sizeResetCount * effPerReset;
@@ -956,7 +956,7 @@ export default function App() {
               {[
                 { l: "Passers", v: `${Math.round(results.passers)}`, c: "#94a3b8", sub: `Per-program pass rates` },
                 { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#94a3b8", sub: `Per-program funded %` },
-                { l: "Resets Sold", v: `${Math.round(results.resets)}`, c: "#94a3b8", sub: `Per-program reset rates` },
+                { l: "Resets Sold", v: `${Math.round(results.resets)}`, c: "#94a3b8", sub: `% of total accounts sold` },
                 { l: "Avg Payout", v: results.payoutTraders > 0 ? $(results.payouts / results.payoutTraders) : "—", c: "#94a3b8", sub: "Per funded trader" },
                 { l: "Revenue / Account", v: $(results.revenue / totalAccounts), c: "#94a3b8" },
                 { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },

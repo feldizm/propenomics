@@ -527,22 +527,38 @@ export default function App() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070b14", color: "#e2e8f0", fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 16px" }}>
+    <div style={{ minHeight: "100vh", background: "#0a1628", color: "#e2e8f0", fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 16px" }}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
 
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f8fafc", margin: "0 0 4px" }}>
-          CXM — Full P&L Simulator
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>
+            <span style={{
+              fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em",
+              background: "linear-gradient(180deg, #f8fafc 0%, #94a3b8 100%)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              fontFamily: "'Inter', sans-serif",
+            }}>pnl</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#d4a017", marginLeft: 1, marginRight: 1 }}>.</span>
+            <span style={{
+              fontSize: 16, fontWeight: 700, letterSpacing: "0.01em",
+              background: "linear-gradient(180deg, #cbd5e1 0%, #64748b 100%)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              fontFamily: "'Inter', sans-serif",
+            }}>com</span>
+          </div>
+          <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
+        </div>
         <p style={{ fontSize: 11, color: "#475569", margin: "0 0 16px" }}>
-          All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. Deterministic expected-value model.
+          Full P&L Simulator · All inputs editable · Deterministic expected-value model
         </p>
 
         {/* ==================== INPUT PANELS ==================== */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
 
           {/* Account Distribution */}
-          <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+          <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>Accounts</h3>
               <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)" }}>
@@ -649,7 +665,7 @@ export default function App() {
           </div>
 
           {/* Trader Performance Metrics */}
-          <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+          <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Trader Performance Metrics</h3>
 
             {calcMode === "perSize" ? (
@@ -699,7 +715,7 @@ export default function App() {
           </div>
 
           {/* Cost Inputs */}
-          <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+          <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs & Overheads</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Input label="Platform / Account" value={platformCost} onChange={setPlatformCost} prefix="$" width={60} />
@@ -843,7 +859,7 @@ export default function App() {
 
             {/* P&L Waterfall */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
-              <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+              <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
                 <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue{projection ? " (Month 1)" : ""}</h3>
                 <Row label="Gross Fee Revenue" value={results.grossFees} bold color="#3b82f6" />
                 <Row label="Marketing Discounts (per program)" value={-results.discounts} indent color="#ef4444" />
@@ -855,7 +871,7 @@ export default function App() {
                 <Row label="TOTAL REVENUE" value={results.revenue} bold color="#22c55e" bg="rgba(34,197,94,0.05)" />
               </div>
 
-              <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+              <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
                 <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs{projection ? " (Month 1)" : ""}</h3>
                 <Row label={`Trader Payouts (${Math.round(results.payoutTraders)} traders)`} value={results.payouts} color="#ef4444" />
                 <div style={{ height: 6 }} />
@@ -963,7 +979,7 @@ export default function App() {
                 { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },
                 { l: "Net / Account", v: $(results.net / totalAccounts), c: results.net > 0 ? "#22c55e" : "#ef4444" },
               ].map(({ l, v, c, sub }) => (
-                <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
+                <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
                   <div style={{ fontSize: 9, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>{l}</div>
                   <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", fontFamily: "'JetBrains Mono'", marginTop: 2 }}>{v}</div>
                   {sub && <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{sub}</div>}

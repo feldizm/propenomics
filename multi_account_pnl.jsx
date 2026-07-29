@@ -532,21 +532,7 @@ export default function App() {
 
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>
-            <span style={{
-              fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em",
-              background: "linear-gradient(180deg, #f8fafc 0%, #94a3b8 100%)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              fontFamily: "'Inter', sans-serif",
-            }}>pnl</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#d4a017", marginLeft: 1, marginRight: 1 }}>.</span>
-            <span style={{
-              fontSize: 16, fontWeight: 700, letterSpacing: "0.01em",
-              background: "linear-gradient(180deg, #cbd5e1 0%, #64748b 100%)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              fontFamily: "'Inter', sans-serif",
-            }}>com</span>
-          </div>
+          <img src="/logo.png" alt="pnl.com" style={{ height: 40 }} />
           <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
           <span style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
         </div>

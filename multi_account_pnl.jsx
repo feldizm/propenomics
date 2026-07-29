@@ -397,6 +397,13 @@ export default function App() {
   const [aovFundedPct, setAovFundedPct] = useState(25);
   const [aovAvgPayoutPct, setAovAvgPayoutPct] = useState(5);
   const [aovResetRate, setAovResetRate] = useState(20);
+  // Average account size is an INDEPENDENT input, not derived from AOV.
+  // Revenue scales with fee, payouts scale with account size, and the
+  // fee->size curve is strongly convex ($600 accounts sell at 12.6x their
+  // fee, $100K accounts at 54.8x). So for any non-uniform size mix,
+  // avg(size) > size(avg(fee)) — deriving size from AOV understates
+  // payouts by 7-48% on realistic mixes. null = follow the fee curve.
+  const [aovSizeOverride, setAovSizeOverride] = useState(null);
 
   // Multi-month projection
   const [months, setMonths] = useState(1);
@@ -459,11 +466,12 @@ export default function App() {
     setExtraCosts(prev => prev.filter(c => c.id !== id));
   };
 
-  const aovSize = interpolateSize(aovFee);
+  const aovImpliedSize = interpolateSize(aovFee);
+  const aovSize = aovSizeOverride ?? aovImpliedSize;
   const effectiveSizes = calcMode === "aov"
     ? [{ size: aovSize, fee: aovFee, count: aovAccounts, discount: aovDiscount, resetPct: aovResetPct,
          passRate: aovPassRate, fundedPct: aovFundedPct, avgPayoutPct: aovAvgPayoutPct, resetRate: aovResetRate,
-         key: "aov", label: `~$${Math.round(aovSize / 1000)}K`, color: "#10b981" }]
+         key: "aov", label: aovSize >= 1000 ? `~$${(aovSize / 1000).toFixed(aovSize >= 10000 ? 0 : 1)}K` : `~$${aovSize}`, color: "#10b981" }]
     : programs.flatMap(p => p.sizes.map((s, i) => ({
         ...s,
         discount: p.discountPct,
@@ -532,21 +540,7 @@ export default function App() {
 
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>
-            <span style={{
-              fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em",
-              background: "linear-gradient(180deg, #f8fafc 0%, #94a3b8 100%)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              fontFamily: "'Inter', sans-serif",
-            }}>pnl</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#d4a017", marginLeft: 1, marginRight: 1 }}>.</span>
-            <span style={{
-              fontSize: 16, fontWeight: 700, letterSpacing: "0.01em",
-              background: "linear-gradient(180deg, #cbd5e1 0%, #64748b 100%)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              fontFamily: "'Inter', sans-serif",
-            }}>com</span>
-          </div>
+          <img src="/logo.png" alt="pnl.com" style={{ height: 40 }} />
           <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
           <span style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
         </div>
@@ -654,9 +648,32 @@ export default function App() {
                 <Input label="Avg Order Value (Fee)" value={aovFee} onChange={setAovFee} prefix="$" width={80} />
                 <Input label="Marketing Discount" value={aovDiscount} onChange={setAovDiscount} suffix="%" width={50} />
                 <Input label="Reset Price" value={aovResetPct} onChange={setAovResetPct} suffix="% of fee" width={50} />
-                <div style={{ fontSize: 9, color: "#475569", lineHeight: 1.5, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8, marginTop: 2 }}>
-                  Interpolated account size: <span style={{ color: "#10b981", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>${aovSize.toLocaleString()}</span>
-                  <br />Uses a single blended tier. Fee ${aovFee} maps to ~${Math.round(aovSize / 1000)}K account via the tier schedule.
+
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10, marginTop: 2 }}>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                    <Input
+                      label="Avg Account Size"
+                      value={aovSize}
+                      onChange={v => setAovSizeOverride(Math.max(1, Math.round(v)))}
+                      prefix="$" width={80}
+                    />
+                    {aovSizeOverride != null && aovSizeOverride !== aovImpliedSize && (
+                      <button
+                        onClick={() => setAovSizeOverride(null)}
+                        title={`Reset to the fee-curve value ($${aovImpliedSize.toLocaleString()})`}
+                        style={{
+                          padding: "4px 8px", background: "rgba(255,255,255,0.06)", color: "#64748b",
+                          border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
+                          fontSize: 9, fontWeight: 600, cursor: "pointer", marginBottom: 1,
+                        }}
+                      >↺ from fee</button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#475569", lineHeight: 1.5, marginTop: 8 }}>
+                    Payouts scale with <b style={{ color: "#94a3b8" }}>account size</b>; revenue scales with <b style={{ color: "#94a3b8" }}>fee</b>. These are set independently because the fee&rarr;size curve is convex — a $600 account sells at 12.6&times; its fee, a $100K account at 54.8&times;.
+                    <br /><br />
+                    A ${aovFee} fee sits at the <span style={{ color: "#10b981", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>${aovImpliedSize.toLocaleString()}</span> point on that curve, but that only equals your true average size if <i>every</i> account is that size. Any real spread pushes the average higher — a barbell of $600 and $50K accounts averaging ${aovFee} in fees has a true average size ~48% above the curve. Enter your actual average if you know it.
+                  </div>
                 </div>
               </div>
             )}

@@ -539,10 +539,10 @@ export default function App() {
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
 
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
-          <img src="/logo.png" alt="pnl.com" style={{ height: 40 }} />
-          <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 4 }}>
+          <img src="/logo.png" alt="pnl.com" style={{ height: 56, display: "block" }} />
+          <div style={{ height: 34, width: 1, background: "rgba(255,255,255,0.12)" }} />
+          <span style={{ fontSize: 17, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
         </div>
         <div style={{ height: 16 }} />
 

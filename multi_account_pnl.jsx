@@ -187,9 +187,9 @@ const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <label style={{ fontSize: small ? 9 : 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.03em" }}>{label}</label>
+      <label style={{ fontSize: small ? 13 : 14, color: "#b8d4f0", fontWeight: 600, letterSpacing: "0.03em" }}>{label}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-        {prefix && <span style={{ fontSize: 12, color: "#475569", marginRight: 2 }}>{prefix}</span>}
+        {prefix && <span style={{ fontSize: 16, color: "#9fc0e8", marginRight: 2 }}>{prefix}</span>}
         <input
           type="text"
           inputMode="decimal"
@@ -199,21 +199,21 @@ const Input = ({ label, value, onChange, prefix, suffix, width, small }) => {
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           style={{
-            width: width || 80, padding: "5px 6px", background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#60a5fa",
-            fontFamily: "'JetBrains Mono'", fontSize: 12, fontWeight: 600,
+            width: Math.round((width || 80) * 1.45), padding: "9px 11px", background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#93c5fd",
+            fontFamily: "'JetBrains Mono'", fontSize: 16, fontWeight: 600,
           }}
         />
-        {suffix && <span style={{ fontSize: 11, color: "#475569", marginLeft: 3 }}>{suffix}</span>}
+        {suffix && <span style={{ fontSize: 15, color: "#9fc0e8", marginLeft: 3 }}>{suffix}</span>}
       </div>
     </div>
   );
 };
 
 const presetBtnStyle = {
-  padding: "6px 12px", background: "rgba(255,255,255,0.04)", color: "#94a3b8",
+  padding: "6px 12px", background: "rgba(255,255,255,0.04)", color: "#d4e8fc",
   border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
-  fontWeight: 600, fontSize: 10, cursor: "pointer", letterSpacing: "0.02em",
+  fontWeight: 600, fontSize: 14, cursor: "pointer", letterSpacing: "0.02em",
 };
 
 const AccountSizeRow = ({ d, onUpdate, onSizeChange }) => {
@@ -223,9 +223,9 @@ const AccountSizeRow = ({ d, onUpdate, onSizeChange }) => {
   const [rawCount, setRawCount] = useState(String(d.count));
 
   const cellInput = {
-    width: 52, padding: "3px 4px", background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa",
-    fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right",
+    width: 76, padding: "4px 6px", background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#93c5fd",
+    fontFamily: "'JetBrains Mono'", fontSize: 15, textAlign: "right",
   };
 
   return (
@@ -237,8 +237,8 @@ const AccountSizeRow = ({ d, onUpdate, onSizeChange }) => {
           style={{
             padding: "3px 2px", background: "rgba(255,255,255,0.06)",
             border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3,
-            color: d.color || "#60a5fa", fontFamily: "'JetBrains Mono'",
-            fontSize: 11, fontWeight: 700, cursor: "pointer", width: 62,
+            color: d.color || "#93c5fd", fontFamily: "'JetBrains Mono'",
+            fontSize: 15, fontWeight: 700, cursor: "pointer", width: 92,
           }}
         >
           {ACCOUNT_SIZES.map(a => (
@@ -279,7 +279,7 @@ const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
 
   return (
     <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-      <td style={{ padding: "6px 5px" }}>
+      <td style={{ padding: "10px 8px" }}>
         <input
           type="text"
           value={cost.name}
@@ -288,14 +288,14 @@ const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
           style={{
             width: "100%", minWidth: 140, padding: "5px 7px",
             background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 4, color: "#e2e8f0", fontFamily: "'Inter'",
-            fontSize: 11, fontWeight: 500,
+            borderRadius: 4, color: "#f0f8ff", fontFamily: "'Inter'",
+            fontSize: 15, fontWeight: 500,
           }}
         />
       </td>
-      <td style={{ padding: "6px 5px", textAlign: "right" }}>
+      <td style={{ padding: "10px 8px", textAlign: "right" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
-          {!isPct && <span style={{ fontSize: 11, color: "#475569" }}>$</span>}
+          {!isPct && <span style={{ fontSize: 15, color: "#9fc0e8" }}>$</span>}
           <input
             type="text"
             inputMode="decimal"
@@ -305,23 +305,23 @@ const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
             onChange={e => setRawAmount(e.target.value)}
             onKeyDown={e => e.key === "Enter" && e.target.blur()}
             style={{
-              width: 90, padding: "5px 7px", background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#60a5fa",
-              fontFamily: "'JetBrains Mono'", fontSize: 11, fontWeight: 600, textAlign: "right",
+              width: 124, padding: "9px 11px", background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#93c5fd",
+              fontFamily: "'JetBrains Mono'", fontSize: 15, fontWeight: 600, textAlign: "right",
             }}
           />
-          {isPct && <span style={{ fontSize: 11, color: "#475569" }}>%</span>}
+          {isPct && <span style={{ fontSize: 15, color: "#9fc0e8" }}>%</span>}
         </div>
       </td>
-      <td style={{ padding: "6px 5px" }}>
+      <td style={{ padding: "10px 8px" }}>
         <select
           value={cost.type}
           onChange={e => onUpdate("type", e.target.value)}
           title={COST_TYPES[cost.type]?.desc}
           style={{
             padding: "5px 7px", background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#e2e8f0",
-            fontFamily: "'Inter'", fontSize: 11, fontWeight: 500, cursor: "pointer",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: "#f0f8ff",
+            fontFamily: "'Inter'", fontSize: 15, fontWeight: 500, cursor: "pointer",
           }}
         >
           {Object.entries(COST_TYPES).map(([k, v]) => (
@@ -330,19 +330,19 @@ const ExtraCostRow = ({ cost, onUpdate, onRemove, impact }) => {
         </select>
       </td>
       <td style={{
-        padding: "6px 5px", textAlign: "right",
+        padding: "10px 8px", textAlign: "right",
         fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444",
       }}>
         {impact != null ? $(impact) : "—"}
       </td>
-      <td style={{ padding: "6px 5px", textAlign: "center" }}>
+      <td style={{ padding: "10px 8px", textAlign: "center" }}>
         <button
           onClick={onRemove}
           title="Remove cost"
           style={{
             padding: "3px 9px", background: "rgba(239,68,68,0.1)", color: "#ef4444",
             border: "1px solid rgba(239,68,68,0.2)", borderRadius: 4, cursor: "pointer",
-            fontSize: 14, fontWeight: 700, lineHeight: 1,
+            fontSize: 19, fontWeight: 700, lineHeight: 1,
           }}
         >×</button>
       </td>
@@ -525,24 +525,24 @@ export default function App() {
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center",
       padding: `5px ${indent ? "12px" : "0"} 5px ${indent ? "20px" : "0"}`,
-      borderBottom: "1px solid rgba(255,255,255,0.03)", background: bg || "transparent",
+      borderBottom: "1px solid rgba(147,197,253,0.10)", background: bg || "transparent",
     }}>
-      <span style={{ fontSize: 11, color: color || "#94a3b8", fontWeight: bold ? 700 : 400 }}>{label}</span>
-      <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono'", fontWeight: bold ? 800 : 600, color: color || "#e2e8f0" }}>
+      <span style={{ fontSize: 15, color: color || "#d4e8fc", fontWeight: bold ? 700 : 400 }}>{label}</span>
+      <span style={{ fontSize: 15, fontFamily: "'JetBrains Mono'", fontWeight: bold ? 800 : 600, color: color || "#f0f8ff" }}>
         {$(value)}
       </span>
     </div>
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a1628", color: "#e2e8f0", fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 16px" }}>
+    <div style={{ minHeight: "100vh", background: "#0a1628", color: "#f0f8ff", fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 16px" }}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
 
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1560, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 4 }}>
           <img src="/logo.png" alt="pnl.com" style={{ height: 56, display: "block" }} />
           <div style={{ height: 34, width: 1, background: "rgba(255,255,255,0.12)" }} />
-          <span style={{ fontSize: 17, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#d4e8fc", letterSpacing: "0.02em" }}>Propenomics</span>
         </div>
         <div style={{ height: 16 }} />
 
@@ -552,17 +552,17 @@ export default function App() {
           {/* Account Distribution */}
           <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>Accounts</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#3b82f6", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>Accounts</h3>
               <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)" }}>
                 {[["perSize", "Per Size"], ["aov", "AOV"]].map(([k, label]) => (
                   <button
                     key={k}
                     onClick={() => setCalcMode(k)}
                     style={{
-                      padding: "4px 10px", fontSize: 9, fontWeight: 700, cursor: "pointer",
+                      padding: "4px 10px", fontSize: 13, fontWeight: 700, cursor: "pointer",
                       border: "none", letterSpacing: "0.04em",
                       background: calcMode === k ? "#3b82f6" : "rgba(255,255,255,0.04)",
-                      color: calcMode === k ? "#fff" : "#64748b",
+                      color: calcMode === k ? "#fff" : "#b8d4f0",
                     }}
                   >{label}</button>
                 ))}
@@ -578,10 +578,10 @@ export default function App() {
                       key={p.id}
                       onClick={() => setActiveProgram(p.id)}
                       style={{
-                        flex: 1, padding: "5px 4px", fontSize: 8, fontWeight: 700,
+                        flex: 1, padding: "5px 4px", fontSize: 12, fontWeight: 700,
                         cursor: "pointer", border: "none", letterSpacing: "0.03em",
                         background: activeProgram === p.id ? p.color : "rgba(255,255,255,0.04)",
-                        color: activeProgram === p.id ? "#fff" : "#64748b",
+                        color: activeProgram === p.id ? "#fff" : "#b8d4f0",
                       }}
                     >{p.name}</button>
                   ))}
@@ -591,31 +591,31 @@ export default function App() {
                   <div key={p.id}>
                     <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>Discount</span>
+                        <span style={{ fontSize: 13, color: "#b8d4f0", fontWeight: 600 }}>Discount</span>
                         <input
                           type="text" inputMode="decimal"
                           value={p.discountPct}
                           onChange={e => updateProgram(p.id, "discountPct", parseNum(e.target.value))}
-                          style={{ width: 30, padding: "2px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }}
+                          style={{ width: 48, padding: "4px 7px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#93c5fd", fontFamily: "'JetBrains Mono'", fontSize: 15, textAlign: "right" }}
                         />
-                        <span style={{ fontSize: 9, color: "#475569" }}>%</span>
+                        <span style={{ fontSize: 13, color: "#9fc0e8" }}>%</span>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 600 }}>Reset</span>
+                        <span style={{ fontSize: 13, color: "#b8d4f0", fontWeight: 600 }}>Reset</span>
                         <input
                           type="text" inputMode="decimal"
                           value={p.resetPct}
                           onChange={e => updateProgram(p.id, "resetPct", parseNum(e.target.value))}
-                          style={{ width: 30, padding: "2px 4px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#60a5fa", fontFamily: "'JetBrains Mono'", fontSize: 11, textAlign: "right" }}
+                          style={{ width: 48, padding: "4px 7px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, color: "#93c5fd", fontFamily: "'JetBrains Mono'", fontSize: 15, textAlign: "right" }}
                         />
-                        <span style={{ fontSize: 9, color: "#475569" }}>% of fee</span>
+                        <span style={{ fontSize: 13, color: "#9fc0e8" }}>% of fee</span>
                       </div>
                     </div>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
                       <thead>
                         <tr>
                           {["Size", "Fee", "Qty"].map(h => (
-                            <th key={h} style={{ padding: "4px 4px", textAlign: h === "Size" ? "left" : "right", fontSize: 9, color: "#64748b", fontWeight: 700 }}>{h}</th>
+                            <th key={h} style={{ padding: "7px 6px", textAlign: h === "Size" ? "left" : "right", fontSize: 13, color: "#b8d4f0", fontWeight: 700 }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -630,14 +630,14 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
-                    <div style={{ marginTop: 6, fontSize: 10, color: "#64748b", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ marginTop: 6, fontSize: 14, color: "#b8d4f0", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
                       <span>{p.name}:</span>
                       <span style={{ fontWeight: 600 }}>{p.sizes.reduce((s, sz) => s + sz.count, 0).toLocaleString()} accounts</span>
                     </div>
                   </div>
                 ))}
 
-                <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 11, color: "#e2e8f0", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 15, color: "#f0f8ff", fontFamily: "'JetBrains Mono'", display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontWeight: 700 }}>Total ({programs.length} programs):</span>
                   <span style={{ fontWeight: 800 }}>{totalAccounts.toLocaleString()} accounts</span>
                 </div>
@@ -662,15 +662,15 @@ export default function App() {
                         onClick={() => setAovSizeOverride(null)}
                         title={`Reset to the fee-curve value ($${aovImpliedSize.toLocaleString()})`}
                         style={{
-                          padding: "4px 8px", background: "rgba(255,255,255,0.06)", color: "#64748b",
+                          padding: "4px 8px", background: "rgba(255,255,255,0.06)", color: "#b8d4f0",
                           border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
-                          fontSize: 9, fontWeight: 600, cursor: "pointer", marginBottom: 1,
+                          fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 1,
                         }}
                       >↺ from fee</button>
                     )}
                   </div>
-                  <div style={{ fontSize: 9, color: "#475569", lineHeight: 1.5, marginTop: 8 }}>
-                    Payouts scale with <b style={{ color: "#94a3b8" }}>account size</b>; revenue scales with <b style={{ color: "#94a3b8" }}>fee</b>. These are set independently because the fee&rarr;size curve is convex — a $600 account sells at 12.6&times; its fee, a $100K account at 54.8&times;.
+                  <div style={{ fontSize: 13, color: "#9fc0e8", lineHeight: 1.5, marginTop: 8 }}>
+                    Payouts scale with <b style={{ color: "#d4e8fc" }}>account size</b>; revenue scales with <b style={{ color: "#d4e8fc" }}>fee</b>. These are set independently because the fee&rarr;size curve is convex — a $600 account sells at 12.6&times; its fee, a $100K account at 54.8&times;.
                     <br /><br />
                     A ${aovFee} fee sits at the <span style={{ color: "#10b981", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>${aovImpliedSize.toLocaleString()}</span> point on that curve, but that only equals your true average size if <i>every</i> account is that size. Any real spread pushes the average higher — a barbell of $600 and $50K accounts averaging ${aovFee} in fees has a true average size ~48% above the curve. Enter your actual average if you know it.
                   </div>
@@ -681,7 +681,7 @@ export default function App() {
 
           {/* Trader Performance Metrics */}
           <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-            <h3 style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Trader Performance Metrics</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#f59e0b", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Trader Performance Metrics</h3>
 
             {calcMode === "perSize" ? (
               <>
@@ -691,10 +691,10 @@ export default function App() {
                       key={p.id}
                       onClick={() => setActiveProgram(p.id)}
                       style={{
-                        flex: 1, padding: "5px 4px", fontSize: 8, fontWeight: 700,
+                        flex: 1, padding: "5px 4px", fontSize: 12, fontWeight: 700,
                         cursor: "pointer", border: "none", letterSpacing: "0.03em",
                         background: activeProgram === p.id ? p.color : "rgba(255,255,255,0.04)",
-                        color: activeProgram === p.id ? "#fff" : "#64748b",
+                        color: activeProgram === p.id ? "#fff" : "#b8d4f0",
                       }}
                     >{p.name}</button>
                   ))}
@@ -718,20 +718,20 @@ export default function App() {
             )}
 
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 10, paddingTop: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Projection</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Projection</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <Input label="Months" value={months} onChange={v => setMonths(Math.max(1, Math.round(v)))} width={50} />
                 <Input label="Growth / Month" value={growthRate} onChange={setGrowthRate} suffix="%" width={50} />
               </div>
             </div>
-            <div style={{ fontSize: 9, color: "#475569", marginTop: 6, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 13, color: "#9fc0e8", marginTop: 6, lineHeight: 1.4 }}>
               Each program has its own performance metrics. Avg Payout capped at 5% per cycle. Set Months &gt; 1 to project.
             </div>
           </div>
 
           {/* Cost Inputs */}
           <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-            <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs & Overheads</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs & Overheads</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Input label="Platform / Account" value={platformCost} onChange={setPlatformCost} prefix="$" width={60} />
               <Input label="Employees / Month" value={employeeCost} onChange={setEmployeeCost} prefix="$" width={80} />
@@ -739,7 +739,7 @@ export default function App() {
               <Input label="Affiliate Share" value={affiliateShare} onChange={setAffiliateShare} suffix="%" width={50} />
               <Input label="Affiliate Commission" value={affiliateComm} onChange={setAffiliateComm} suffix="%" width={50} />
             </div>
-            <div style={{ fontSize: 9, color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 13, color: "#9fc0e8", marginTop: 8, lineHeight: 1.4 }}>
               Discount, reset price, and trader metrics are set per program.
             </div>
           </div>
@@ -752,10 +752,10 @@ export default function App() {
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 12, flexWrap: "wrap" }}>
             <div>
-              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#a78bfa", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                 Extra Costs & Overheads
               </h3>
-              <div style={{ fontSize: 9, color: "#64748b", marginTop: 3, maxWidth: 560 }}>
+              <div style={{ fontSize: 13, color: "#b8d4f0", marginTop: 3, maxWidth: 560 }}>
                 Add custom cost lines — rent, SaaS, legal, KYC/onboarding, payment processing, rev-share, tax accrual, etc. Each line scales against its chosen base (flat $, per account, per passer, per payout, % of revenue, or % of fees).
               </div>
             </div>
@@ -777,25 +777,25 @@ export default function App() {
                 style={{
                   padding: "6px 14px", background: "rgba(167,139,250,0.2)", color: "#c4b5fd",
                   border: "1px solid rgba(167,139,250,0.4)", borderRadius: 4,
-                  fontWeight: 700, fontSize: 11, cursor: "pointer",
+                  fontWeight: 700, fontSize: 15, cursor: "pointer",
                 }}
               >+ Add Cost</button>
             </div>
           </div>
 
           {extraCosts.length === 0 ? (
-            <div style={{ fontSize: 11, color: "#475569", padding: "14px 0", textAlign: "center", fontStyle: "italic" }}>
+            <div style={{ fontSize: 15, color: "#9fc0e8", padding: "14px 0", textAlign: "center", fontStyle: "italic" }}>
               No extra costs configured. Click a quick-add button or "Add Cost" to start.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                  <th style={{ padding: "5px 5px", textAlign: "left", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Name</th>
-                  <th style={{ padding: "5px 5px", textAlign: "right", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Amount</th>
-                  <th style={{ padding: "5px 5px", textAlign: "left", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Type</th>
-                  <th style={{ padding: "5px 5px", textAlign: "right", fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Impact (avg)</th>
-                  <th style={{ padding: "5px 5px", width: 40 }}></th>
+                  <th style={{ padding: "8px 7px", textAlign: "left", fontSize: 13, color: "#b8d4f0", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Name</th>
+                  <th style={{ padding: "8px 7px", textAlign: "right", fontSize: 13, color: "#b8d4f0", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Amount</th>
+                  <th style={{ padding: "8px 7px", textAlign: "left", fontSize: 13, color: "#b8d4f0", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Type</th>
+                  <th style={{ padding: "8px 7px", textAlign: "right", fontSize: 13, color: "#b8d4f0", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Impact (avg)</th>
+                  <th style={{ padding: "8px 7px", width: 40 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -809,10 +809,10 @@ export default function App() {
                   />
                 ))}
                 <tr style={{ borderTop: "1px solid rgba(255,255,255,0.1)", background: "rgba(167,139,250,0.04)" }}>
-                  <td colSpan={3} style={{ padding: "8px 5px", fontSize: 10, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  <td colSpan={3} style={{ padding: "12px 8px", fontSize: 14, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.05em", textTransform: "uppercase" }}>
                     Total Extra Costs ({extraCosts.length})
                   </td>
-                  <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: "#ef4444" }}>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: "#ef4444" }}>
                     {results ? $(results.extras) : "—"}
                   </td>
                   <td></td>
@@ -828,7 +828,7 @@ export default function App() {
             style={{
               padding: "10px 32px", background: "#22c55e",
               color: "#000", border: "none", borderRadius: 6,
-              fontWeight: 800, fontSize: 13, cursor: "pointer", width: "100%",
+              fontWeight: 800, fontSize: 18, cursor: "pointer", width: "100%",
             }}>
             {months > 1
               ? `Recalculate — ${totalAccounts.toLocaleString()} Accounts/mo × ${months} Months`
@@ -857,16 +857,16 @@ export default function App() {
               background: heroNet > 0 ? "rgba(34,197,94,0.05)" : "rgba(239,68,68,0.05)",
               border: `2px solid ${heroNet > 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
             }}>
-              <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: 14, color: "#b8d4f0", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                 {projection
                   ? `${months}-Month P&L — ${heroAccounts.toLocaleString()} Total Accounts · ${programs.length} Programs`
                   : `Net P&L — ${totalAccounts.toLocaleString()} Accounts · ${calcMode === "perSize" ? `${programs.length} Programs` : "AOV Mode"}`
                 }
               </div>
-              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: heroNet > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
+              <div style={{ fontSize: 44, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: heroNet > 0 ? "#22c55e" : "#ef4444", marginTop: 4 }}>
                 {$(heroNet)}
               </div>
-              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+              <div style={{ fontSize: 15, color: "#b8d4f0", marginTop: 4 }}>
                 {heroMargin.toFixed(1)}% margin · Revenue {$(heroRev)} · Costs {$(heroCosts)}
                 {projection && ` · ${months} months${growthRate > 0 ? ` @ ${growthRate}%/mo growth` : ""}`}
               </div>
@@ -875,7 +875,7 @@ export default function App() {
             {/* P&L Waterfall */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
               <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue{projection ? " (Month 1)" : ""}</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue{projection ? " (Month 1)" : ""}</h3>
                 <Row label="Gross Fee Revenue" value={results.grossFees} bold color="#3b82f6" />
                 <Row label="Marketing Discounts (per program)" value={-results.discounts} indent color="#ef4444" />
                 <Row label={`Affiliate Commissions (${affiliateComm}%)`} value={-results.affComm} indent color="#ef4444" />
@@ -887,7 +887,7 @@ export default function App() {
               </div>
 
               <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs{projection ? " (Month 1)" : ""}</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs{projection ? " (Month 1)" : ""}</h3>
                 <Row label={`Trader Payouts (${Math.round(results.payoutTraders)} traders)`} value={results.payouts} color="#ef4444" />
                 <div style={{ height: 6 }} />
                 <Row label={`Platform ($${platformCost} × ${totalAccounts.toLocaleString()})`} value={results.platform} color="#f59e0b" />
@@ -916,15 +916,15 @@ export default function App() {
 
             {/* Per-size breakdown */}
             <div style={{ marginBottom: 24 }}>
-              <h3 style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#d4e8fc", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                 {calcMode === "aov" ? "Blended Tier" : "By Account Size"} (variable costs only — fixed excluded){projection ? " — Month 1" : ""}
               </h3>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
                   <thead>
                     <tr style={{ borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
                       {["Size", "Qty", "Fee", "Gross", "Discounts", "Aff Comm", "Net Fees", "Resets", "Payouts", "Platform", "Variable P&L"].map(h => (
-                        <th key={h} style={{ padding: "6px 5px", textAlign: h === "Size" ? "left" : "right", fontSize: 8, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                        <th key={h} style={{ padding: "10px 8px", textAlign: h === "Size" ? "left" : "right", fontSize: 12, fontWeight: 700, color: "#b8d4f0", letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -935,44 +935,44 @@ export default function App() {
                       const varPnL = s.nf + s.resetRev - s.payouts - (d.count * platformCost);
                       return (
                         <tr key={d.key || d.size} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td style={{ padding: "7px 5px" }}>
-                            {d.program && <div style={{ fontSize: 8, color: "#64748b", lineHeight: 1.2 }}>{d.program}</div>}
-                            <div style={{ fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>{d.label}</div>
+                          <td style={{ padding: "11px 8px" }}>
+                            {d.program && <div style={{ fontSize: 12, color: "#b8d4f0", lineHeight: 1.2 }}>{d.program}</div>}
+                            <div style={{ fontWeight: 700, color: d.color, fontFamily: "'JetBrains Mono'", fontSize: 15 }}>{d.label}</div>
                           </td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{d.count.toLocaleString()}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>${d.fee}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{$(s.gf)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#d4e8fc" }}>{d.count.toLocaleString()}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#d4e8fc" }}>${d.fee}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#d4e8fc" }}>{$(s.gf)}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>
                             ({$(s.disc)})
-                            <span style={{ fontSize: 9, color: "#64748b", marginLeft: 4 }}>{d.discount ?? 0}%</span>
+                            <span style={{ fontSize: 13, color: "#b8d4f0", marginLeft: 4 }}>{d.discount ?? 0}%</span>
                           </td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>({$(s.ac)})</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#3b82f6" }}>{$(s.nf)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#6366f1" }}>{$(s.resetRev)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>{$(s.payouts)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#f59e0b" }}>{$(d.count * platformCost)}</td>
-                          <td style={{ padding: "7px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: varPnL > 0 ? "#22c55e" : "#ef4444" }}>{$(varPnL)}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>({$(s.ac)})</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#3b82f6" }}>{$(s.nf)}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#6366f1" }}>{$(s.resetRev)}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>{$(s.payouts)}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#f59e0b" }}>{$(d.count * platformCost)}</td>
+                          <td style={{ padding: "11px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: varPnL > 0 ? "#22c55e" : "#ef4444" }}>{$(varPnL)}</td>
                         </tr>
                       );
                     })}
                     <tr style={{ borderTop: "2px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.03)" }}>
-                      <td style={{ padding: "8px 5px", fontWeight: 800 }}>TOTAL</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{totalAccounts.toLocaleString()}</td>
+                      <td style={{ padding: "12px 8px", fontWeight: 800 }}>TOTAL</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{totalAccounts.toLocaleString()}</td>
                       <td></td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{$(results.grossFees)}</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>({$(results.discounts)})</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>({$(results.affComm)})</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#3b82f6" }}>{$(results.netFees)}</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#6366f1" }}>{$(results.resetRev)}</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>{$(results.payouts)}</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#f59e0b" }}>{$(results.platform)}</td>
-                      <td style={{ padding: "8px 5px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, fontSize: 12, color: (results.netFees + results.resetRev - results.payouts - results.platform) > 0 ? "#22c55e" : "#ef4444" }}>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{$(results.grossFees)}</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>({$(results.discounts)})</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>({$(results.affComm)})</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#3b82f6" }}>{$(results.netFees)}</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#6366f1" }}>{$(results.resetRev)}</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>{$(results.payouts)}</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#f59e0b" }}>{$(results.platform)}</td>
+                      <td style={{ padding: "12px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, fontSize: 16, color: (results.netFees + results.resetRev - results.payouts - results.platform) > 0 ? "#22c55e" : "#ef4444" }}>
                         {$(results.netFees + results.resetRev - results.payouts - results.platform)}
                       </td>
                     </tr>
                   </tbody>
                 </table>
-                <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>
+                <div style={{ fontSize: 14, color: "#9fc0e8", marginTop: 4 }}>
                   Variable P&L = Net Fees + Resets − Payouts − Platform. Add fixed costs (${((employeeCost + marketingCost) / 1000).toFixed(0)}K){results.extras > 0 ? ` + extra costs (${$(results.extras)})` : ""} for full P&L.
                 </div>
               </div>
@@ -981,23 +981,23 @@ export default function App() {
             {/* Key stats (Month 1 / single-month) */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 20 }}>
               {projection && (
-                <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "#64748b", fontWeight: 600, marginBottom: -4, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                <div style={{ gridColumn: "1 / -1", fontSize: 13, color: "#b8d4f0", fontWeight: 600, marginBottom: -4, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                   Month 1 Unit Economics
                 </div>
               )}
               {[
-                { l: "Passers", v: `${Math.round(results.passers)}`, c: "#94a3b8", sub: `Per-program pass rates` },
-                { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#94a3b8", sub: `Per-program funded %` },
-                { l: "Resets Sold", v: `${Math.round(results.resets)}`, c: "#94a3b8", sub: `% of total accounts sold` },
-                { l: "Avg Payout", v: results.payoutTraders > 0 ? $(results.payouts / results.payoutTraders) : "—", c: "#94a3b8", sub: "Per funded trader" },
-                { l: "Revenue / Account", v: $(results.revenue / totalAccounts), c: "#94a3b8" },
-                { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },
+                { l: "Passers", v: `${Math.round(results.passers)}`, c: "#d4e8fc", sub: `Per-program pass rates` },
+                { l: "Payout Traders", v: `${Math.round(results.payoutTraders)}`, c: "#d4e8fc", sub: `Per-program funded %` },
+                { l: "Resets Sold", v: `${Math.round(results.resets)}`, c: "#d4e8fc", sub: `% of total accounts sold` },
+                { l: "Avg Payout", v: results.payoutTraders > 0 ? $(results.payouts / results.payoutTraders) : "—", c: "#d4e8fc", sub: "Per funded trader" },
+                { l: "Revenue / Account", v: $(results.revenue / totalAccounts), c: "#d4e8fc" },
+                { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#d4e8fc" },
                 { l: "Net / Account", v: $(results.net / totalAccounts), c: results.net > 0 ? "#22c55e" : "#ef4444" },
               ].map(({ l, v, c, sub }) => (
                 <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
-                  <div style={{ fontSize: 9, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>{l}</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", fontFamily: "'JetBrains Mono'", marginTop: 2 }}>{v}</div>
-                  {sub && <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{sub}</div>}
+                  <div style={{ fontSize: 13, color: "#b8d4f0", fontWeight: 600, letterSpacing: "0.04em" }}>{l}</div>
+                  <div style={{ fontSize: 21, fontWeight: 800, color: "#f0f8ff", fontFamily: "'JetBrains Mono'", marginTop: 2 }}>{v}</div>
+                  {sub && <div style={{ fontSize: 13, color: "#9fc0e8", marginTop: 2 }}>{sub}</div>}
                 </div>
               ))}
             </div>
@@ -1005,18 +1005,18 @@ export default function App() {
             {/* Monthly projection table */}
             {projection && projection.length > 1 && (
               <div style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#3b82f6", marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                   Monthly Cash Flow — {months} Months{growthRate > 0 ? ` @ ${growthRate}%/mo Growth` : ""}
                 </h3>
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
                     <thead>
                       <tr style={{ borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
                         {["Month", "Accounts", "Revenue", "Costs", "Net P&L", "Cumulative"].map(h => (
                           <th key={h} style={{
-                            padding: "6px 8px",
+                            padding: "9px 11px",
                             textAlign: h === "Month" ? "center" : "right",
-                            fontSize: 8, fontWeight: 700, color: "#64748b",
+                            fontSize: 12, fontWeight: 700, color: "#b8d4f0",
                             letterSpacing: "0.05em", textTransform: "uppercase",
                           }}>{h}</th>
                         ))}
@@ -1025,20 +1025,20 @@ export default function App() {
                     <tbody>
                       {projection.map(m => (
                         <tr key={m.month} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td style={{ padding: "7px 8px", textAlign: "center", fontFamily: "'JetBrains Mono'", color: "#94a3b8", fontWeight: 600 }}>{m.month}</td>
-                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#94a3b8" }}>{m.totalAccounts.toLocaleString()}</td>
-                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#22c55e" }}>{$(m.revenue)}</td>
-                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>{$(m.costs)}</td>
-                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: m.net > 0 ? "#22c55e" : "#ef4444" }}>{$(m.net)}</td>
-                          <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: m.cumNet > 0 ? "#22c55e" : "#ef4444" }}>{$(m.cumNet)}</td>
+                          <td style={{ padding: "11px 11px", textAlign: "center", fontFamily: "'JetBrains Mono'", color: "#d4e8fc", fontWeight: 600 }}>{m.month}</td>
+                          <td style={{ padding: "11px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#d4e8fc" }}>{m.totalAccounts.toLocaleString()}</td>
+                          <td style={{ padding: "11px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#22c55e" }}>{$(m.revenue)}</td>
+                          <td style={{ padding: "11px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", color: "#ef4444" }}>{$(m.costs)}</td>
+                          <td style={{ padding: "11px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: m.net > 0 ? "#22c55e" : "#ef4444" }}>{$(m.net)}</td>
+                          <td style={{ padding: "11px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, color: m.cumNet > 0 ? "#22c55e" : "#ef4444" }}>{$(m.cumNet)}</td>
                         </tr>
                       ))}
                       <tr style={{ borderTop: "2px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.03)" }}>
-                        <td style={{ padding: "8px 8px", textAlign: "center", fontWeight: 800 }}>Total</td>
-                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{projTotals.totalAccounts.toLocaleString()}</td>
-                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#22c55e" }}>{$(projTotals.revenue)}</td>
-                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>{$(projTotals.costs)}</td>
-                        <td style={{ padding: "8px 8px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, fontSize: 12, color: projTotals.net > 0 ? "#22c55e" : "#ef4444" }}>{$(projTotals.net)}</td>
+                        <td style={{ padding: "12px 11px", textAlign: "center", fontWeight: 800 }}>Total</td>
+                        <td style={{ padding: "12px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{projTotals.totalAccounts.toLocaleString()}</td>
+                        <td style={{ padding: "12px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#22c55e" }}>{$(projTotals.revenue)}</td>
+                        <td style={{ padding: "12px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 700, color: "#ef4444" }}>{$(projTotals.costs)}</td>
+                        <td style={{ padding: "12px 11px", textAlign: "right", fontFamily: "'JetBrains Mono'", fontWeight: 800, fontSize: 16, color: projTotals.net > 0 ? "#22c55e" : "#ef4444" }}>{$(projTotals.net)}</td>
                         <td></td>
                       </tr>
                     </tbody>
@@ -1047,7 +1047,7 @@ export default function App() {
                 {(() => {
                   const beMonth = projection.findIndex(m => m.cumNet > 0);
                   return beMonth > 0 ? (
-                    <div style={{ fontSize: 10, color: "#22c55e", marginTop: 6, fontWeight: 600 }}>
+                    <div style={{ fontSize: 14, color: "#22c55e", marginTop: 6, fontWeight: 600 }}>
                       Break-even at month {projection[beMonth].month} (cumulative turns positive at {$(projection[beMonth].cumNet)})
                     </div>
                   ) : null;

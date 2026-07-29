@@ -126,6 +126,8 @@ function computeExtras(extras, ctx) {
 }
 
 const ACCOUNT_SIZES = [
+  { size: 600,    label: "$600" },
+  { size: 1250,   label: "$1.25K" },
   { size: 2500,   label: "$2.5K" },
   { size: 5000,   label: "$5K" },
   { size: 10000,  label: "$10K" },
@@ -135,20 +137,19 @@ const ACCOUNT_SIZES = [
 ];
 
 const PROGRAM_FEES = {
-  freedom: { 10000: 150, 25000: 400, 50000: 750, 100000: 1165 },
-  instant: { 2500: 150, 5000: 250, 10000: 400, 25000: 1000, 50000: 2000, 100000: 4000 },
+  freedom: { 600: 20, 1250: 45, 2500: 60, 5000: 90, 10000: 150, 25000: 250, 50000: 400, 100000: 750 },
+  instant: { 600: 75, 1250: 120, 2500: 200, 5000: 300, 10000: 450, 25000: 875, 50000: 1450, 100000: 2900 },
 };
 
-const FEE_SIZE_SCHEDULE = [
-  { fee: 167,  size: 10000 },
-  { fee: 397,  size: 25000 },
-  { fee: 747,  size: 50000 },
-  { fee: 1197, size: 100000 },
-];
+const FEE_SIZE_SCHEDULE = ACCOUNT_SIZES.map(a => {
+  const ids = Object.keys(PROGRAM_FEES);
+  const avg = ids.reduce((s, id) => s + (PROGRAM_FEES[id][a.size] || 0), 0) / ids.length;
+  return { fee: avg, size: a.size };
+});
 
 function interpolateSize(fee) {
   const s = FEE_SIZE_SCHEDULE;
-  if (fee <= s[0].fee) return Math.max(1000, Math.round(s[0].size * (fee / s[0].fee)));
+  if (fee <= s[0].fee) return Math.max(100, Math.round(s[0].size * (fee / s[0].fee)));
   for (let i = 1; i < s.length; i++) {
     if (fee <= s[i].fee) {
       const t = (fee - s[i - 1].fee) / (s[i].fee - s[i - 1].fee);
@@ -358,10 +359,14 @@ export default function App() {
       discountPct: 15, resetPct: 80,
       passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
+        { size: 600,    fee: 20,   count: 250 },
+        { size: 1250,   fee: 45,   count: 250 },
+        { size: 2500,   fee: 60,   count: 250 },
+        { size: 5000,   fee: 90,   count: 250 },
         { size: 10000,  fee: 150,  count: 250 },
-        { size: 25000,  fee: 400,  count: 250 },
-        { size: 50000,  fee: 750,  count: 250 },
-        { size: 100000, fee: 1165, count: 250 },
+        { size: 25000,  fee: 250,  count: 250 },
+        { size: 50000,  fee: 400,  count: 250 },
+        { size: 100000, fee: 750,  count: 250 },
       ],
     },
     {
@@ -369,12 +374,14 @@ export default function App() {
       discountPct: 5, resetPct: 90,
       passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
-        { size: 2500,   fee: 150,  count: 250 },
-        { size: 5000,   fee: 250,  count: 250 },
-        { size: 10000,  fee: 400,  count: 250 },
-        { size: 25000,  fee: 1000, count: 250 },
-        { size: 50000,  fee: 2000, count: 250 },
-        { size: 100000, fee: 4000, count: 250 },
+        { size: 600,    fee: 75,   count: 250 },
+        { size: 1250,   fee: 120,  count: 250 },
+        { size: 2500,   fee: 200,  count: 250 },
+        { size: 5000,   fee: 300,  count: 250 },
+        { size: 10000,  fee: 450,  count: 250 },
+        { size: 25000,  fee: 875,  count: 250 },
+        { size: 50000,  fee: 1450, count: 250 },
+        { size: 100000, fee: 2900, count: 250 },
       ],
     },
   ]);
@@ -520,22 +527,36 @@ export default function App() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#070b14", color: "#e2e8f0", fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 16px" }}>
+    <div style={{ minHeight: "100vh", background: "#0a1628", color: "#e2e8f0", fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 16px" }}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
 
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: "#f8fafc", margin: "0 0 4px" }}>
-          CXM — Full P&L Simulator
-        </h1>
-        <p style={{ fontSize: 11, color: "#475569", margin: "0 0 16px" }}>
-          All inputs editable. 1:30 leverage · 100% split · No daily DD · No consistency rules. Deterministic expected-value model.
-        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 0 }}>
+            <span style={{
+              fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em",
+              background: "linear-gradient(180deg, #f8fafc 0%, #94a3b8 100%)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              fontFamily: "'Inter', sans-serif",
+            }}>pnl</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#d4a017", marginLeft: 1, marginRight: 1 }}>.</span>
+            <span style={{
+              fontSize: 16, fontWeight: 700, letterSpacing: "0.01em",
+              background: "linear-gradient(180deg, #cbd5e1 0%, #64748b 100%)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              fontFamily: "'Inter', sans-serif",
+            }}>com</span>
+          </div>
+          <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
+        </div>
+        <div style={{ height: 16 }} />
 
         {/* ==================== INPUT PANELS ==================== */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
 
           {/* Account Distribution */}
-          <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+          <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <h3 style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", margin: 0, letterSpacing: "0.05em", textTransform: "uppercase" }}>Accounts</h3>
               <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.12)" }}>
@@ -642,7 +663,7 @@ export default function App() {
           </div>
 
           {/* Trader Performance Metrics */}
-          <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+          <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Trader Performance Metrics</h3>
 
             {calcMode === "perSize" ? (
@@ -692,7 +713,7 @@ export default function App() {
           </div>
 
           {/* Cost Inputs */}
-          <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+          <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
             <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs & Overheads</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Input label="Platform / Account" value={platformCost} onChange={setPlatformCost} prefix="$" width={60} />
@@ -836,7 +857,7 @@ export default function App() {
 
             {/* P&L Waterfall */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 24 }}>
-              <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+              <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
                 <h3 style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Revenue{projection ? " (Month 1)" : ""}</h3>
                 <Row label="Gross Fee Revenue" value={results.grossFees} bold color="#3b82f6" />
                 <Row label="Marketing Discounts (per program)" value={-results.discounts} indent color="#ef4444" />
@@ -848,7 +869,7 @@ export default function App() {
                 <Row label="TOTAL REVENUE" value={results.revenue} bold color="#22c55e" bg="rgba(34,197,94,0.05)" />
               </div>
 
-              <div style={{ padding: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+              <div style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
                 <h3 style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", margin: "0 0 10px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Costs{projection ? " (Month 1)" : ""}</h3>
                 <Row label={`Trader Payouts (${Math.round(results.payoutTraders)} traders)`} value={results.payouts} color="#ef4444" />
                 <div style={{ height: 6 }} />
@@ -956,7 +977,7 @@ export default function App() {
                 { l: "Cost / Account", v: $(results.costs / totalAccounts), c: "#94a3b8" },
                 { l: "Net / Account", v: $(results.net / totalAccounts), c: results.net > 0 ? "#22c55e" : "#ef4444" },
               ].map(({ l, v, c, sub }) => (
-                <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
+                <div key={l} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.04)", borderLeft: `3px solid ${c}`, borderRadius: "0 6px 6px 0" }}>
                   <div style={{ fontSize: 9, color: "#64748b", fontWeight: 600, letterSpacing: "0.04em" }}>{l}</div>
                   <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", fontFamily: "'JetBrains Mono'", marginTop: 2 }}>{v}</div>
                   {sub && <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{sub}</div>}

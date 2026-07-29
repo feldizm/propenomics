@@ -154,7 +154,7 @@ const FEE_SIZE_SCHEDULE = [
 
 function interpolateSize(fee) {
   const s = FEE_SIZE_SCHEDULE;
-  if (fee <= s[0].fee) return Math.max(1000, Math.round(s[0].size * (fee / s[0].fee)));
+  if (fee <= s[0].fee) return Math.max(100, Math.round(s[0].size * (fee / s[0].fee)));
   for (let i = 1; i < s.length; i++) {
     if (fee <= s[i].fee) {
       const t = (fee - s[i - 1].fee) / (s[i].fee - s[i - 1].fee);

@@ -136,7 +136,6 @@ const ACCOUNT_SIZES = [
 
 const PROGRAM_FEES = {
   freedom: { 10000: 150, 25000: 400, 50000: 750, 100000: 1165 },
-  classic: { 10000: 97, 25000: 225, 50000: 410, 100000: 697 },
   instant: { 2500: 150, 5000: 250, 10000: 400, 25000: 1000, 50000: 2000, 100000: 4000 },
 };
 
@@ -366,17 +365,6 @@ export default function App() {
       ],
     },
     {
-      id: "classic", name: "2 Step Classic", color: "#f59e0b",
-      discountPct: 15, resetPct: 80,
-      passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
-      sizes: [
-        { size: 10000,  fee: 97,   count: 250 },
-        { size: 25000,  fee: 225,  count: 250 },
-        { size: 50000,  fee: 410,  count: 250 },
-        { size: 100000, fee: 697,  count: 250 },
-      ],
-    },
-    {
       id: "instant", name: "Instant Funding", color: "#10b981",
       discountPct: 5, resetPct: 90,
       passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
@@ -394,14 +382,14 @@ export default function App() {
 
   // Calc mode: "perSize" (existing per-tier) or "aov" (average order value)
   const [calcMode, setCalcMode] = useState("perSize");
-  const [aovAccounts, setAovAccounts] = useState(4000);
-  const [aovFee, setAovFee] = useState(500);
+  const [aovAccounts, setAovAccounts] = useState(2000);
+  const [aovFee, setAovFee] = useState(200);
   const [aovDiscount, setAovDiscount] = useState(15);
   const [aovResetPct, setAovResetPct] = useState(80);
-  const [aovPassRate, setAovPassRate] = useState(10);
-  const [aovFundedPct, setAovFundedPct] = useState(10);
+  const [aovPassRate, setAovPassRate] = useState(25);
+  const [aovFundedPct, setAovFundedPct] = useState(25);
   const [aovAvgPayoutPct, setAovAvgPayoutPct] = useState(5);
-  const [aovResetRate, setAovResetRate] = useState(35);
+  const [aovResetRate, setAovResetRate] = useState(20);
 
   // Multi-month projection
   const [months, setMonths] = useState(1);
@@ -409,13 +397,19 @@ export default function App() {
 
   // Costs
   const [platformCost, setPlatformCost] = useState(2.75);
-  const [employeeCost, setEmployeeCost] = useState(30000);
-  const [marketingCost, setMarketingCost] = useState(100000);
+  const [employeeCost, setEmployeeCost] = useState(15000);
+  const [marketingCost, setMarketingCost] = useState(0);
   const [affiliateShare, setAffiliateShare] = useState(25);
   const [affiliateComm, setAffiliateComm] = useState(20);
 
   // Extra user-defined costs / overheads / parameters
-  const [extraCosts, setExtraCosts] = useState([]);
+  const [extraCosts, setExtraCosts] = useState([
+    { id: 1, name: "Office", amount: 1000, type: "fixed" },
+    { id: 2, name: "Payment Processing", amount: 2, type: "pct_fees" },
+    { id: 3, name: "KYC / Onboarding", amount: 1, type: "per_passer" },
+    { id: 4, name: "Axcera Setup Fee", amount: 15000, type: "fixed" },
+    { id: 5, name: "Axcera Monthly", amount: 25000, type: "fixed" },
+  ]);
 
   const [results, setResults] = useState(null);
   const [projection, setProjection] = useState(null);

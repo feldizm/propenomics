@@ -550,9 +550,7 @@ export default function App() {
           <div style={{ height: 24, width: 1, background: "rgba(255,255,255,0.1)" }} />
           <span style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.02em" }}>Propenomics</span>
         </div>
-        <p style={{ fontSize: 11, color: "#475569", margin: "0 0 16px" }}>
-          Full P&L Simulator · All inputs editable · Deterministic expected-value model
-        </p>
+        <div style={{ height: 16 }} />
 
         {/* ==================== INPUT PANELS ==================== */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>

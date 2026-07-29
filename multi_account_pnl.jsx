@@ -141,16 +141,11 @@ const PROGRAM_FEES = {
   instant: { 600: 75, 1250: 120, 2500: 200, 5000: 300, 10000: 450, 25000: 875, 50000: 1450, 100000: 2900 },
 };
 
-const FEE_SIZE_SCHEDULE = [
-  { fee: 20,   size: 600 },
-  { fee: 45,   size: 1250 },
-  { fee: 60,   size: 2500 },
-  { fee: 90,   size: 5000 },
-  { fee: 150,  size: 10000 },
-  { fee: 250,  size: 25000 },
-  { fee: 400,  size: 50000 },
-  { fee: 750,  size: 100000 },
-];
+const FEE_SIZE_SCHEDULE = ACCOUNT_SIZES.map(a => {
+  const ids = Object.keys(PROGRAM_FEES);
+  const avg = ids.reduce((s, id) => s + (PROGRAM_FEES[id][a.size] || 0), 0) / ids.length;
+  return { fee: avg, size: a.size };
+});
 
 function interpolateSize(fee) {
   const s = FEE_SIZE_SCHEDULE;

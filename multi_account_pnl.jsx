@@ -126,6 +126,8 @@ function computeExtras(extras, ctx) {
 }
 
 const ACCOUNT_SIZES = [
+  { size: 600,    label: "$600" },
+  { size: 1250,   label: "$1.25K" },
   { size: 2500,   label: "$2.5K" },
   { size: 5000,   label: "$5K" },
   { size: 10000,  label: "$10K" },
@@ -135,15 +137,19 @@ const ACCOUNT_SIZES = [
 ];
 
 const PROGRAM_FEES = {
-  freedom: { 10000: 150, 25000: 400, 50000: 750, 100000: 1165 },
-  instant: { 2500: 150, 5000: 250, 10000: 400, 25000: 1000, 50000: 2000, 100000: 4000 },
+  freedom: { 600: 20, 1250: 45, 2500: 60, 5000: 90, 10000: 150, 25000: 250, 50000: 400, 100000: 750 },
+  instant: { 600: 75, 1250: 120, 2500: 200, 5000: 300, 10000: 450, 25000: 875, 50000: 1450, 100000: 2900 },
 };
 
 const FEE_SIZE_SCHEDULE = [
-  { fee: 167,  size: 10000 },
-  { fee: 397,  size: 25000 },
-  { fee: 747,  size: 50000 },
-  { fee: 1197, size: 100000 },
+  { fee: 20,   size: 600 },
+  { fee: 45,   size: 1250 },
+  { fee: 60,   size: 2500 },
+  { fee: 90,   size: 5000 },
+  { fee: 150,  size: 10000 },
+  { fee: 250,  size: 25000 },
+  { fee: 400,  size: 50000 },
+  { fee: 750,  size: 100000 },
 ];
 
 function interpolateSize(fee) {
@@ -358,10 +364,14 @@ export default function App() {
       discountPct: 15, resetPct: 80,
       passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
+        { size: 600,    fee: 20,   count: 250 },
+        { size: 1250,   fee: 45,   count: 250 },
+        { size: 2500,   fee: 60,   count: 250 },
+        { size: 5000,   fee: 90,   count: 250 },
         { size: 10000,  fee: 150,  count: 250 },
-        { size: 25000,  fee: 400,  count: 250 },
-        { size: 50000,  fee: 750,  count: 250 },
-        { size: 100000, fee: 1165, count: 250 },
+        { size: 25000,  fee: 250,  count: 250 },
+        { size: 50000,  fee: 400,  count: 250 },
+        { size: 100000, fee: 750,  count: 250 },
       ],
     },
     {
@@ -369,12 +379,14 @@ export default function App() {
       discountPct: 5, resetPct: 90,
       passRate: 10, fundedPct: 10, avgPayoutPct: 5, resetRate: 35,
       sizes: [
-        { size: 2500,   fee: 150,  count: 250 },
-        { size: 5000,   fee: 250,  count: 250 },
-        { size: 10000,  fee: 400,  count: 250 },
-        { size: 25000,  fee: 1000, count: 250 },
-        { size: 50000,  fee: 2000, count: 250 },
-        { size: 100000, fee: 4000, count: 250 },
+        { size: 600,    fee: 75,   count: 250 },
+        { size: 1250,   fee: 120,  count: 250 },
+        { size: 2500,   fee: 200,  count: 250 },
+        { size: 5000,   fee: 300,  count: 250 },
+        { size: 10000,  fee: 450,  count: 250 },
+        { size: 25000,  fee: 875,  count: 250 },
+        { size: 50000,  fee: 1450, count: 250 },
+        { size: 100000, fee: 2900, count: 250 },
       ],
     },
   ]);
